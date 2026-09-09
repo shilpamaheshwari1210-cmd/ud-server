@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import { config } from '../config/env';
 import { logger } from './logger';
 
@@ -259,7 +259,7 @@ export const backgroundQueueDepth = () => backgroundQueue.length + backgroundAct
  * Note: avif effort=2 measured LARGER than both 0 and 4 (171 KB). libaom's
  * speed presets are not monotonic in size, so only 0 and 4 are used.
  */
-const encode = (pipeline: sharp.Sharp, spec: DerivativeSpec): sharp.Sharp => {
+const encode = (pipeline: Sharp, spec: DerivativeSpec): Sharp => {
   switch (spec.format) {
     case 'avif':
       return pipeline.avif({
