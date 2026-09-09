@@ -1,0 +1,20 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Claude Code
+.claude
+
+# yarn error logs
+yarn-error.log
+
+# Environment varibales
+.env*
+!.env*.example
+
+# Code coverage
+coverage
+
+logs

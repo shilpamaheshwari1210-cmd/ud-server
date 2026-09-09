@@ -1,0 +1,1057 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  password            String?
+  firstName           String
+  lastName            String
+  phone               String?
+  avatar              String?
+  googleId            String?   @unique
+  role                UserRole  @default(CUSTOMER)
+  isVerified          Boolean   @default(false)
+  isActive            Boolean   @default(true)
+  emailVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  refreshToken        String?   @db.Text
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+
+  // Email verification at sign-up. Only the hash is stored, so nobody with
+  // database access can read the code a customer was sent — the same rule the
+  // delivery codes follow.
+  emailOtpHash        String?
+  emailOtpExpiresAt   DateTime?
+  emailOtpSentAt      DateTime?
+  emailOtpSentCount   Int       @default(0)
+  emailOtpAttempts    Int       @default(0)
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  addresses       Address[]
+  orders          Order[]
+  cart            Cart?
+  wishlistItems   WishlistItem[]
+  reviews         Review[]
+  notifications   Notification[]
+  recentlyViewed  RecentlyViewed[]
+  subAdminProfile SubAdmin?
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  SUB_ADMIN
+  CUSTOMER
+}
+
+model SubAdmin {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("sub_admins")
+}
+
+model Address {
+  id           String      @id @default(uuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         AddressType @default(HOME)
+  firstName    String
+  lastName     String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  pincode      String
+  country      String      @default("India")
+  isDefault    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  orders Order[]
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+enum AddressType {
+  HOME
+  WORK
+  OTHER
+}
+
+// ─────────────────────────────────────────────
+// CATEGORIES
+// ─────────────────────────────────────────────
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String
+  slug         String     @unique
+  description  String?    @db.Text
+  image        String?
+  bannerImage  String?
+  parentId     String?
+  parent       Category?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children     Category[] @relation("CategoryChildren")
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  isFeatured   Boolean    @default(false)
+  showInNav    Boolean    @default(true)
+  showOnHome   Boolean    @default(false)
+  gender       String?
+  metaTitle    String?
+  metaDesc     String?    @db.Text
+  metaKeywords String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  products Product[]
+
+  @@index([slug])
+  @@index([parentId])
+  @@map("categories")
+}
+
+// ─────────────────────────────────────────────
+// COLLECTIONS
+// ─────────────────────────────────────────────
+
+model Collection {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  image       String?
+  bannerImage String?
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  metaTitle   String?
+  metaDesc    String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products ProductCollection[]
+
+  @@index([slug])
+  @@map("collections")
+}
+
+model ProductCollection {
+  productId    String
+  collectionId String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  sortOrder    Int        @default(0)
+
+  @@id([productId, collectionId])
+  @@map("product_collections")
+}
+
+// ─────────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────────
+
+model Product {
+  id                     String    @id @default(uuid())
+  name                   String
+  slug                   String    @unique
+  description            String?   @db.LongText
+  shortDesc              String?   @db.Text
+  categoryId             String
+  category               Category  @relation(fields: [categoryId], references: [id])
+  brand                  String?
+  sku                    String?   @unique
+  barcode                String?
+  basePrice              Decimal   @db.Decimal(10, 2)
+  salePrice              Decimal?  @db.Decimal(10, 2)
+  costPrice              Decimal?  @db.Decimal(10, 2)
+  taxPercent             Decimal   @default(18) @db.Decimal(5, 2)
+  stockQuantity          Int       @default(0)
+  lowStockAlert          Int       @default(5)
+  trackInventory         Boolean   @default(true)
+  isActive               Boolean   @default(true)
+  isFeatured             Boolean   @default(false)
+  isTrending             Boolean   @default(false)
+  isNewArrival           Boolean   @default(true)
+  isBestSeller           Boolean   @default(false)
+  fabric                 String?
+  careInstructions       String?   @db.Text
+  sizeChart              String?   @db.Text
+  weight                 Decimal?  @db.Decimal(10, 3)
+  standardShippingCharge Decimal?  @db.Decimal(10, 2)
+  codShippingCharge      Decimal?  @db.Decimal(10, 2)
+  expressShippingCharge  Decimal?  @db.Decimal(10, 2)
+  metaTitle              String?
+  metaDesc               String?   @db.Text
+  metaKeywords           String?
+  canonicalUrl           String?
+  videoUrl               String?
+  sortOrder              Int       @default(0)
+  totalReviews           Int       @default(0)
+  avgRating              Decimal   @default(0) @db.Decimal(3, 2)
+  totalSold              Int       @default(0)
+  viewCount              Int       @default(0)
+  gender                 String    @default("UNISEX")
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  images          ProductImage[]
+  variants        ProductVariant[]
+  tags            ProductTag[]
+  badges          ProductBadge[]
+  faqs            ProductFaq[]
+  reviews         Review[]
+  collections     ProductCollection[]
+  cartItems       CartItem[]
+  wishlistItems   WishlistItem[]
+  orderItems      OrderItem[]
+  recentlyViewed  RecentlyViewed[]
+  relatedProducts RelatedProduct[]    @relation("ProductRelations")
+  relatedTo       RelatedProduct[]    @relation("RelatedTo")
+  inventoryLogs   InventoryLog[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([isActive, isFeatured])
+  @@index([isActive, isTrending])
+  @@index([isActive, isNewArrival])
+  @@index([gender])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  /// Which colour this shot is OF, matching ProductVariant.color by name.
+  /// Null means it belongs to no particular colour and is shown as the default
+  /// — which is what every image predating this field is, so the gallery keeps
+  /// behaving exactly as before until an admin starts tagging.
+  color     String?
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([productId, color])
+  @@map("product_images")
+}
+
+model ProductVariant {
+  id            String   @id @default(uuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String?  @unique
+  size          String?
+  color         String?
+  colorHex      String?
+  material      String?
+  price         Decimal? @db.Decimal(10, 2)
+  salePrice     Decimal? @db.Decimal(10, 2)
+  stockQuantity Int      @default(0)
+  isActive      Boolean  @default(true)
+  image         String?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductTag {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag       String
+
+  @@index([productId])
+  @@index([tag])
+  @@map("product_tags")
+}
+
+model ProductBadge {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String
+  color     String  @default("#000000")
+  bgColor   String  @default("#FFFFFF")
+
+  @@index([productId])
+  @@map("product_badges")
+}
+
+model ProductFaq {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String  @db.Text
+  sortOrder Int     @default(0)
+
+  @@index([productId])
+  @@map("product_faqs")
+}
+
+model RelatedProduct {
+  productId        String
+  relatedProductId String
+  product          Product @relation("ProductRelations", fields: [productId], references: [id], onDelete: Cascade)
+  relatedProduct   Product @relation("RelatedTo", fields: [relatedProductId], references: [id], onDelete: Cascade)
+
+  @@id([productId, relatedProductId])
+  @@map("related_products")
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY
+// ─────────────────────────────────────────────
+
+model InventoryLog {
+  id          String          @id @default(uuid())
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?
+  type        InventoryAction
+  quantity    Int
+  previousQty Int
+  newQty      Int
+  reason      String?
+  reference   String?
+  createdAt   DateTime        @default(now())
+
+  @@index([productId])
+  @@map("inventory_logs")
+}
+
+enum InventoryAction {
+  RESTOCK
+  SALE
+  RETURN
+  ADJUSTMENT
+  DAMAGE
+}
+
+// ─────────────────────────────────────────────
+// REVIEWS
+// ─────────────────────────────────────────────
+
+model Review {
+  id           String       @id @default(uuid())
+  productId    String
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating       Int
+  title        String?
+  body         String?      @db.Text
+  images       String?      @db.Text
+  isVerified   Boolean      @default(false)
+  isApproved   Boolean      @default(false)
+  status       ReviewStatus @default(PENDING)
+  helpfulCount Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+  @@map("reviews")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─────────────────────────────────────────────
+// CART
+// ─────────────────────────────────────────────
+
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String          @id @default(uuid())
+  cartId    String
+  cart      Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity  Int             @default(1)
+  price     Decimal         @db.Decimal(10, 2)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// ─────────────────────────────────────────────
+// WISHLIST
+// ─────────────────────────────────────────────
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("wishlist_items")
+}
+
+// ─────────────────────────────────────────────
+// ORDERS
+// ─────────────────────────────────────────────
+
+model Order {
+  id                 String        @id @default(uuid())
+  orderNumber        String        @unique
+  userId             String
+  user               User          @relation(fields: [userId], references: [id])
+  addressId          String?
+  address            Address?      @relation(fields: [addressId], references: [id])
+  status             OrderStatus   @default(PENDING)
+  paymentStatus      PaymentStatus @default(PENDING)
+  paymentMethod      PaymentMethod @default(COD)
+  shippingMethod     String        @default("STANDARD")
+  deliveryChargePaid Boolean       @default(false)
+  subtotal           Decimal       @db.Decimal(10, 2)
+  discount           Decimal       @default(0) @db.Decimal(10, 2)
+  shippingCharge     Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount          Decimal       @default(0) @db.Decimal(10, 2)
+  total              Decimal       @db.Decimal(10, 2)
+  couponCode         String?
+  couponDiscount     Decimal       @default(0) @db.Decimal(10, 2)
+  notes              String?       @db.Text
+  trackingNumber     String?
+  trackingUrl        String?
+  deliveryDate       DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+
+  // Fulfilment — who is actually carrying the parcel.
+  // Defaulted at checkout from the self_delivery_pincodes setting, and
+  // overridable by an admin per order: the pincode list is a rule of thumb,
+  // the person packing the order knows the exception.
+  fulfilmentType       FulfilmentType @default(DELHIVERY)
+  deliveryPartnerName  String?
+  deliveryPartnerPhone String?
+  dispatchedAt         DateTime?
+  /// Cash actually collected at the door on a self-delivered COD order.
+  codCollected         Decimal?       @db.Decimal(10, 2)
+  deliveryNotes        String?        @db.Text
+
+  // Delivery OTP — the proof that the parcel reached the customer's hands.
+  // Only a hash is kept: nobody with database access, and no admin screen,
+  // can read the code the customer was sent. That is the whole point — the
+  // office can only confirm a delivery by being told the code by the customer.
+  deliveryOtpHash       String?
+  deliveryOtpExpiresAt  DateTime?
+  deliveryOtpSentAt     DateTime?
+  deliveryOtpSentCount  Int       @default(0)
+  deliveryOtpAttempts   Int       @default(0)
+  /// Where the last code was sent, for the audit trail: "EMAIL" or "SMS".
+  deliveryOtpChannel    String?
+  deliveryOtpVerifiedAt DateTime?
+  /// The admin user who typed the code in.
+  deliveryOtpVerifiedBy String?
+  shippingAddress      Json
+  billingAddress       Json?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  items          OrderItem[]
+  payment        Payment?
+  returnRequests ReturnRequest[]
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([fulfilmentType])
+  @@map("orders")
+}
+
+enum FulfilmentType {
+  /// Handed to the courier partner.
+  DELHIVERY
+  /// Delivered by our own people, locally.
+  SELF
+}
+
+model OrderItem {
+  id        String          @id @default(uuid())
+  orderId   String
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  name      String
+  image     String?
+  size      String?
+  color     String?
+  sku       String?
+  quantity  Int
+  price     Decimal         @db.Decimal(10, 2)
+  total     Decimal         @db.Decimal(10, 2)
+  createdAt DateTime        @default(now())
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  COD
+  RAZORPAY
+  CASHFREE
+  UPI
+  CARD
+  NET_BANKING
+}
+
+// ─────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────
+
+model Payment {
+  id                   String        @id @default(uuid())
+  orderId              String        @unique
+  order                Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  razorpayOrderId      String?
+  razorpayPaymentId    String?
+  razorpaySignature    String?
+  cashfreeOrderId      String?
+  cashfreePaymentId    String?
+  amount               Decimal       @db.Decimal(10, 2)
+  currency             String        @default("INR")
+  status               PaymentStatus @default(PENDING)
+  method               PaymentMethod @default(COD)
+  isDeliveryChargeOnly Boolean       @default(false)
+  gatewayResponse      Json?
+  refundId             String?
+  refundAmount         Decimal?      @db.Decimal(10, 2)
+  refundedAt           DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────
+// COUPONS
+// ─────────────────────────────────────────────
+
+model Coupon {
+  id             String     @id @default(uuid())
+  code           String     @unique
+  description    String?
+  type           CouponType
+  value          Decimal    @db.Decimal(10, 2)
+  minOrderAmount Decimal?   @db.Decimal(10, 2)
+  maxDiscount    Decimal?   @db.Decimal(10, 2)
+  usageLimit     Int?
+  usageCount     Int        @default(0)
+  userLimit      Int        @default(1)
+  isActive       Boolean    @default(true)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  applicableTo   String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([code])
+  @@map("coupons")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+  FREE_SHIPPING
+  BUY_X_GET_Y
+}
+
+// ─────────────────────────────────────────────
+// RETURN REQUESTS
+// ─────────────────────────────────────────────
+
+model ReturnRequest {
+  id           String       @id @default(uuid())
+  orderId      String
+  order        Order        @relation(fields: [orderId], references: [id])
+  userId       String
+  reason       String
+  description  String?      @db.Text
+  images       String?      @db.Text
+  status       ReturnStatus @default(REQUESTED)
+  adminNote    String?      @db.Text
+  refundAmount Decimal?     @db.Decimal(10, 2)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([orderId])
+  @@map("return_requests")
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PICKED_UP
+  REFUNDED
+}
+
+// ─────────────────────────────────────────────
+// BANNERS & HOMEPAGE
+// ─────────────────────────────────────────────
+
+model Banner {
+  id          String     @id @default(uuid())
+  title       String
+  subtitle    String?
+  image       String
+  mobileImage String?
+  link        String?
+  ctaText     String?
+  type        BannerType @default(HERO)
+  gender      String     @default("ALL")
+  position    String?
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  startsAt    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([type, isActive])
+  @@index([gender])
+  @@map("banners")
+}
+
+enum BannerType {
+  HERO
+  PROMOTIONAL
+  COLLECTION
+  CATEGORY
+  OFFER
+  ANNOUNCEMENT
+}
+
+model HomepageSection {
+  id        String              @id @default(uuid())
+  type      HomepageSectionType
+  title     String?
+  subtitle  String?
+  config    Json?
+  isActive  Boolean             @default(true)
+  sortOrder Int                 @default(0)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([type, isActive])
+  @@map("homepage_sections")
+}
+
+enum HomepageSectionType {
+  HERO_SLIDER
+  PROMO_STRIP
+  SHOP_LATEST
+  PROMOTIONAL_BANNERS
+  FEATURED_CATEGORIES
+  TRENDING_PRODUCTS
+  NEW_ARRIVALS
+  BEST_SELLERS
+  FEATURED_PRODUCTS
+  COLLECTION_SHOWCASE
+  COLLECTION_BANNERS
+  COLLECTION_BANNER
+  SHOP_BY_LOOK
+  INSTAGRAM_GALLERY
+  TESTIMONIALS
+  NEWSLETTER
+  BRAND_SECTION
+  VIDEO_SECTION
+  SEO_CONTENT
+  CUSTOM_HTML
+  CUSTOM_BANNER
+  STORE_LOCATOR
+  MARQUEE
+  INSTAGRAM_REELS
+}
+
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  address   String   @db.Text
+  city      String?
+  phone     String?
+  email     String?
+  hours     String?
+  image     String?
+  mapLink   String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model InstagramReel {
+  id        String   @id @default(uuid())
+  title     String?
+  caption   String?
+  reelUrl   String
+  videoUrl  String?
+  thumbnail String?
+  // Who the reel is styled for. "ALL" shows on both storefronts; WOMEN/MEN
+  // show only under that toggle. Same vocabulary as Banner.gender so the
+  // admin means one thing by "target gender" everywhere.
+  gender    String   @default("ALL")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([gender, isActive])
+  @@map("instagram_reels")
+}
+
+model Testimonial {
+  id          String   @id @default(uuid())
+  name        String
+  avatar      String?
+  rating      Int      @default(5)
+  review      String   @db.Text
+  designation String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("testimonials")
+}
+
+// ─────────────────────────────────────────────
+// BLOGS
+// ─────────────────────────────────────────────
+
+model Blog {
+  id           String        @id @default(uuid())
+  title        String
+  slug         String        @unique
+  content      String        @db.LongText
+  excerpt      String?       @db.Text
+  image        String?
+  authorId     String?
+  authorName   String?
+  categoryId   String?
+  blogCategory BlogCategory? @relation(fields: [categoryId], references: [id])
+  isPublished  Boolean       @default(false)
+  publishedAt  DateTime?
+  metaTitle    String?
+  metaDesc     String?       @db.Text
+  metaKeywords String?
+  viewCount    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  tags BlogTag[]
+
+  @@index([slug])
+  @@index([isPublished])
+  @@map("blogs")
+}
+
+model BlogCategory {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blogs Blog[]
+
+  @@map("blog_categories")
+}
+
+model BlogTag {
+  id     String @id @default(uuid())
+  blogId String
+  blog   Blog   @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  tag    String
+
+  @@index([blogId])
+  @@map("blog_tags")
+}
+
+// ─────────────────────────────────────────────
+// SEO & CMS
+// ─────────────────────────────────────────────
+
+model SeoMeta {
+  id           String   @id @default(uuid())
+  page         String   @unique
+  metaTitle    String?
+  metaDesc     String?  @db.Text
+  metaKeywords String?
+  ogTitle      String?
+  ogDesc       String?  @db.Text
+  ogImage      String?
+  twitterTitle String?
+  twitterDesc  String?  @db.Text
+  schema       Json?
+  canonicalUrl String?
+  robots       String   @default("index, follow")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("seo_meta")
+}
+
+model CmsPage {
+  id           String   @id @default(uuid())
+  title        String
+  slug         String   @unique
+  content      String   @db.LongText
+  isActive     Boolean  @default(true)
+  showInFooter Boolean  @default(false)
+  showInNav    Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  metaTitle    String?
+  metaDesc     String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([slug])
+  @@map("cms_pages")
+}
+
+// ─────────────────────────────────────────────
+// MEDIA LIBRARY
+// ─────────────────────────────────────────────
+
+model Media {
+  id           String      @id @default(uuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  folder       MediaFolder @default(GENERAL)
+  altText      String?
+  title        String?
+  uploadedBy   String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([folder])
+  @@map("media_library")
+}
+
+enum MediaFolder {
+  PRODUCTS
+  BANNERS
+  CATEGORIES
+  BLOGS
+  USERS
+  GENERAL
+}
+
+// ─────────────────────────────────────────────
+// SETTINGS
+// ─────────────────────────────────────────────
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String?  @db.LongText
+  group     String   @default("general")
+  type      String   @default("text")
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+  @@map("settings")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  data      Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_CONFIRMED
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+  RETURN_APPROVED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  PROMO
+  GENERAL
+}
+
+// ─────────────────────────────────────────────
+// RECENTLY VIEWED
+// ─────────────────────────────────────────────
+
+model RecentlyViewed {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("recently_viewed")
+}
+
+// ─────────────────────────────────────────────
+// MENU / NAVIGATION
+// ─────────────────────────────────────────────
+
+model NavMenu {
+  id        String    @id @default(uuid())
+  label     String
+  url       String?
+  parentId  String?
+  parent    NavMenu?  @relation("MenuChildren", fields: [parentId], references: [id])
+  children  NavMenu[] @relation("MenuChildren")
+  target    String    @default("_self")
+  icon      String?
+  /// Where the link is rendered. "quick_links" is the row at the top of the
+  /// Shop mega menu; the column is deliberately open so a header or footer
+  /// menu can reuse this table without a migration.
+  position  String    @default("header")
+  /// ALL shows under both storefronts; WOMEN/MEN restrict it to one, matching
+  /// Banner.gender and InstagramReel.gender.
+  gender    String    @default("ALL")
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([position, isActive])
+  @@index([position, gender, isActive])
+  @@map("nav_menus")
+}
+
+/// A sign-in code in flight, held OUTSIDE the User table on purpose.
+///
+/// Codes used to be columns on User, which meant the account row had to exist
+/// before the code could be stored — so an abandoned sign-up left a permanent
+/// unverified user, and that email could then neither register again ("already
+/// registered") nor sign in ("verify your email"). Ten accounts reached that
+/// dead end in two days.
+///
+/// Keeping the code here means no account exists until a code is actually
+/// verified. An abandoned attempt expires and leaves nothing behind.
+model EmailOtp {
+  id         String    @id @default(uuid())
+  email      String    @unique
+  otpHash    String
+  /// Held for a sign-up until the code is confirmed, then written to the User.
+  firstName  String?
+  lastName   String?
+  phone      String?
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  sentCount  Int       @default(0)
+  lastSentAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([expiresAt])
+  @@map("email_otps")
+}
