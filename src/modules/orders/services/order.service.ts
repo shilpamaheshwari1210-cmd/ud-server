@@ -280,13 +280,30 @@ export class OrderService {
         include: { items: true, address: true },
       });
 
-      // 5. Atomically decrement stock within the same transaction
+      // 5. Atomically decrement stock within the same transaction, and log
+      // every movement so InventoryLog has a full audit trail to match.
       for (const item of data.items) {
-        await tx.product.update({
+        const updatedProduct = await tx.product.update({
           where: { id: item.productId },
           data: {
             totalSold: { increment: item.quantity },
             stockQuantity: { decrement: item.quantity },
+          },
+          select: { stockQuantity: true },
+        });
+        await tx.inventoryLog.create({
+          data: {
+            productId: item.productId,
+            variantId: item.variantId,
+            type: 'SALE',
+            quantity: item.quantity,
+            // The update above already applied the decrement atomically, so
+            // the "before" value is derived from the "after" it returned
+            // rather than re-read (which could race with a concurrent order).
+            previousQty: updatedProduct.stockQuantity + item.quantity,
+            newQty: updatedProduct.stockQuantity,
+            reason: 'Order placed',
+            reference: order.orderNumber,
           },
         });
       }
@@ -508,14 +525,53 @@ export class OrderService {
   }
 
   async cancelOrder(id: string, userId: string, reason: string) {
-    const order = await prisma.order.findFirst({
-      where: { id, userId, status: { in: ['PENDING', 'CONFIRMED'] } },
-    });
-    if (!order) throw new AppError('Order cannot be cancelled', 400);
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id, userId, status: { in: ['PENDING', 'CONFIRMED'] } },
+        include: { items: { select: { productId: true, variantId: true, quantity: true } } },
+      });
+      if (!order) throw new AppError('Order cannot be cancelled', 400);
 
-    return prisma.order.update({
-      where: { id },
-      data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason },
+      // Restore stock and reverse totalSold for every line item — the mirror
+      // image of the decrement in createOrder. Cancelling an order must not
+      // permanently leak inventory or leave totalSold inflated.
+      for (const item of order.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { stockQuantity: true, totalSold: true },
+        });
+        // Product may have been hard-deleted since the order was placed
+        // (variants are hard-deletable per §18); nothing left to restore.
+        if (!product) continue;
+
+        const newStock = product.stockQuantity + item.quantity;
+        // totalSold should never go negative, though it shouldn't in the
+        // normal case — clamp defensively rather than trust it.
+        const newSold = Math.max(0, product.totalSold - item.quantity);
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQuantity: newStock, totalSold: newSold },
+        });
+
+        await tx.inventoryLog.create({
+          data: {
+            productId: item.productId,
+            variantId: item.variantId,
+            type: 'RETURN',
+            quantity: item.quantity,
+            previousQty: product.stockQuantity,
+            newQty: newStock,
+            reason: 'Order cancelled',
+            reference: order.orderNumber,
+          },
+        });
+      }
+
+      return tx.order.update({
+        where: { id },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason },
+      });
     });
   }
 }
