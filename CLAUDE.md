@@ -1177,8 +1177,7 @@ Verified against the code on 2026-07-27. Ordered by severity.
 **6. Failed logins write plaintext passwords to disk.**
 `errorHandler` logs `req.body` on every error, so a failed `/auth/login` or `/auth/register` persists the submitted password into `logs/error.log`.
 
-**7. CMS pages are broken.**
-`app/(store)/[page]/page.tsx:11` fetches `${API_URL}/cms/${slug}`, but the backend serves CMS content at `/api/v1/seo/cms/:slug`. There is no `/cms` mount in `app.ts` — every CMS page (about, privacy-policy, terms, return-policy, shipping-policy, faq) 404s. These slugs are also listed in `sitemap.ts`.
+**~~7. CMS pages are broken.~~ FIXED 2026-09-09 (wood-vintage only).** `app/(store)/[page]/page.tsx` fetched `${API_URL}/cms/${slug}`, but the backend serves CMS content at `/api/v1/seo/cms/:slug` — every CMS page 404'd. One-line fix (added the `/seo` prefix); verified live (`GET /about` now returns 200 with real content, not a 404). Not backported to `unique-dressup`.
 
 **8. The frontend Docker image cannot build as written.**
 The Dockerfile copies `.next/standalone`, but `next.config.ts` only emits standalone output when `NEXT_OUTPUT === 'standalone'`, which the Dockerfile never sets.
