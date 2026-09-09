@@ -91,7 +91,10 @@ export class OrderService {
     shippingMethod?: string;
     couponCode?: string;
     notes?: string;
-    items: { productId: string; variantId?: string; quantity: number; price: number }[];
+    // `price` is accepted for backwards compatibility with the current
+    // request shape but is NEVER used to compute money — see effectivePrice()
+    // below, which re-derives it from the database on every order.
+    items: { productId: string; variantId?: string; quantity: number; price?: number }[];
     shippingAddress: object;
     billingAddress?: object;
   }) {
@@ -102,6 +105,7 @@ export class OrderService {
         where: { id: { in: productIds }, isActive: true, deletedAt: null },
         select: {
           id: true, name: true, stockQuantity: true,
+          basePrice: true, salePrice: true,
           standardShippingCharge: true,
           codShippingCharge: true,
           expressShippingCharge: true,
@@ -118,7 +122,7 @@ export class OrderService {
       const variants = variantIds.length
         ? await tx.productVariant.findMany({
             where: { id: { in: variantIds } },
-            select: { id: true, size: true, color: true, sku: true, image: true },
+            select: { id: true, size: true, color: true, sku: true, image: true, price: true },
           })
         : [];
       const variantMap = new Map(variants.map(v => [v.id, v]));
@@ -131,8 +135,22 @@ export class OrderService {
         }
       }
 
-      // 2. Compute totals
-      const subtotal = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      // 2. Compute totals — price is ALWAYS re-derived from the database here,
+      // never taken from data.items[].price. That field arrives from the
+      // browser and a crafted request could set it to anything; trusting it
+      // would let a customer name their own price. Same effective-price rule
+      // cart.controller.ts uses, so what the cart showed is what gets charged:
+      // variant.price if the line has a variant and it has one set, else the
+      // product's salePrice, else its basePrice.
+      const effectivePrice = (productId: string, variantId?: string): number => {
+        const product = productMap.get(productId)!;
+        const variant = variantId ? variantMap.get(variantId) : undefined;
+        return Number(variant?.price ?? product.salePrice ?? product.basePrice);
+      };
+      const subtotal = data.items.reduce(
+        (sum, item) => sum + effectivePrice(item.productId, item.variantId) * item.quantity,
+        0,
+      );
       const method = (data.shippingMethod || 'STANDARD').toUpperCase();
 
       // Use per-product charge if set (take the max across all cart items),
@@ -243,12 +261,13 @@ export class OrderService {
             create: data.items.map(item => {
               const product = productMap.get(item.productId);
               const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
+              const price = effectivePrice(item.productId, item.variantId);
               return {
                 productId: item.productId,
                 variantId: item.variantId,
                 quantity: item.quantity,
-                price: item.price,
-                total: item.price * item.quantity,
+                price,
+                total: price * item.quantity,
                 name: product?.name ?? '',
                 size:  variant?.size  ?? null,
                 color: variant?.color ?? null,
