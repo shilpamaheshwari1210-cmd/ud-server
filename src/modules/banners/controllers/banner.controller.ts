@@ -6,6 +6,8 @@ import { prisma } from '../../../config/prisma';
 import { sendSuccess, sendPaginated } from '../../../utils/response';
 import { deleteUploadByUrl, getImageUrl } from '../../../utils/upload';
 import { paginationParams } from '../../../utils/slugify';
+import { resolveCountryIdForBrowsing } from '../../../utils/countryPricing';
+import { resolveBanners } from '../../../utils/countryContent';
 
 // Fixed hero banner resolution
 
@@ -19,11 +21,10 @@ const HERO_H = 560;
 export class BannerController {
   async getByType(req: Request, res: Response) {
     const { type } = req.params;
-    const { gender } = req.query as Record<string, string>;
+    const { gender, country } = req.query as Record<string, string>;
 
     const where: any = {
       type: type.toUpperCase() as any,
-      isActive: true,
       OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
     };
 
@@ -32,10 +33,8 @@ export class BannerController {
       where.gender = { in: [gender.toUpperCase(), 'ALL'] };
     }
 
-    const banners = await prisma.banner.findMany({
-      where,
-      orderBy: { sortOrder: 'asc' },
-    });
+    const countryId = await resolveCountryIdForBrowsing(country);
+    const banners = await resolveBanners(prisma, countryId, where);
     return sendSuccess(res, banners, 'Banners fetched');
   }
 

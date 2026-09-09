@@ -36,6 +36,25 @@ export async function resolveCountryByCode(
   return country;
 }
 
+/**
+ * Resolves `?country=` to a Country id for read-only storefront endpoints
+ * (product browsing, CMS pages, homepage/banners). A code that does not
+ * match any row degrades to "no country" (global content, base pricing,
+ * default availability) instead of failing the request — nothing here is
+ * money changing hands, so a bad query param shouldn't break the page.
+ * `POST /orders` uses `resolveCountryByCode` directly instead, since an
+ * unknown country there should be a hard error.
+ */
+export async function resolveCountryIdForBrowsing(code?: string): Promise<string | null> {
+  if (!code) return null;
+  try {
+    const country = await resolveCountryByCode(prisma, code);
+    return country?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getCountryPricingMap(
   tx: Queryable,
   countryId: string,

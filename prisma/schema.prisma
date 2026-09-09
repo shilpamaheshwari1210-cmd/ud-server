@@ -895,7 +895,17 @@ model SeoMeta {
 model CmsPage {
   id           String   @id @default(uuid())
   title        String
-  slug         String   @unique
+  // Was `@unique` alone, which blocked a country override from ever
+  // existing under the same slug as the global page. Now unique per
+  // (slug, countryId) instead — lets "about" have both a global row
+  // (countryId null) and a per-country override row.
+  //
+  // MySQL caveat: a unique index treats multiple NULLs as distinct, so this
+  // constraint does NOT stop two global (countryId null) rows for the same
+  // slug — only two rows for the same (slug, real countryId) pair. The
+  // global-row uniqueness is enforced in upsertCmsPage() instead, by
+  // querying for an existing (slug, countryId: null) row before creating.
+  slug         String
   content      String   @db.LongText
   isActive     Boolean  @default(true)
   showInFooter Boolean  @default(false)
@@ -909,6 +919,7 @@ model CmsPage {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@unique([slug, countryId])
   @@index([slug])
   @@index([countryId])
   @@map("cms_pages")

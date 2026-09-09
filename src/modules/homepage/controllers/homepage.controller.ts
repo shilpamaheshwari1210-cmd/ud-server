@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../../config/prisma';
 import { sendSuccess } from '../../../utils/response';
+import { resolveCountryIdForBrowsing } from '../../../utils/countryPricing';
+import { resolveHomepageSections, resolveBanners } from '../../../utils/countryContent';
 
 export class HomepageController {
   async getSections(req: Request, res: Response) {
-    const sections = await prisma.homepageSection.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-    });
+    const { country } = req.query as Record<string, string>;
+    const countryId = await resolveCountryIdForBrowsing(country);
+    const sections = await resolveHomepageSections(prisma, countryId);
     return sendSuccess(res, sections, 'Homepage sections fetched');
   }
 
@@ -53,16 +54,17 @@ export class HomepageController {
     // gender, plus the ones targeted at everyone. Without this the server-
     // rendered homepage showed every banner while the client's own refetch
     // showed the filtered set, so the two disagreed until the first toggle.
-    const { gender } = req.query as Record<string, string>;
+    const { gender, country } = req.query as Record<string, string>;
     const gWhere =
       gender && gender.toUpperCase() !== 'ALL'
         ? { gender: { in: [gender.toUpperCase(), 'ALL'] } }
         : {};
+    const countryId = await resolveCountryIdForBrowsing(country);
 
     const [sections, heroBanners, promoBanners, testimonials, settings] = await Promise.all([
-      prisma.homepageSection.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
-      prisma.banner.findMany({ where: { type: 'HERO', isActive: true, ...gWhere }, orderBy: { sortOrder: 'asc' } }),
-      prisma.banner.findMany({ where: { type: 'PROMOTIONAL', isActive: true, ...gWhere }, orderBy: { sortOrder: 'asc' } }),
+      resolveHomepageSections(prisma, countryId),
+      resolveBanners(prisma, countryId, { type: 'HERO', ...gWhere }),
+      resolveBanners(prisma, countryId, { type: 'PROMOTIONAL', ...gWhere }),
       prisma.testimonial.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
       prisma.setting.findMany({ where: { group: 'homepage' } }),
     ]);

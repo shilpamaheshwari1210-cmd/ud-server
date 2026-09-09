@@ -5,7 +5,7 @@ import { AppError } from '../../../middlewares/error.middleware';
 import { createSlug } from '../../../utils/slugify';
 import { colorNameToHex } from '../../../utils/colorName';
 import { paginationParams } from '../../../utils/slugify';
-import { resolveCountryByCode, applyCountryOverrides } from '../../../utils/countryPricing';
+import { applyCountryOverrides, resolveCountryIdForBrowsing } from '../../../utils/countryPricing';
 
 export interface ProductFilters {
   page?: number;
@@ -37,22 +37,6 @@ export interface ProductFilters {
    * throw on an unknown country.
    */
   country?: string;
-}
-
-/**
- * Resolves `?country=` to a Country id for the storefront browse endpoints.
- * A code that does not match any row degrades to "no country" (base pricing,
- * default availability) instead of failing the request — this is a read-only
- * listing, not money changing hands.
- */
-async function resolveCountryIdForBrowsing(code?: string): Promise<string | null> {
-  if (!code) return null;
-  try {
-    const country = await resolveCountryByCode(prisma, code);
-    return country?.id ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**

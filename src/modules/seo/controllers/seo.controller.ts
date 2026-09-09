@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../../../config/prisma';
 import { sendSuccess, sendError, sendPaginated } from '../../../utils/response';
 import { paginationParams } from '../../../utils/slugify';
+import { resolveCmsPage } from '../../../utils/countryContent';
+import { resolveCountryIdForBrowsing } from '../../../utils/countryPricing';
 
 export class SeoController {
   async getByPage(req: Request, res: Response) {
@@ -47,8 +49,10 @@ export class SeoController {
 
   async getCmsPage(req: Request, res: Response) {
     const { slug } = req.params;
-    const page = await prisma.cmsPage.findFirst({ where: { slug, isActive: true } });
-    if (!page) return sendError(res, 'Page not found', 404);
+    const { country } = req.query as Record<string, string>;
+    const countryId = await resolveCountryIdForBrowsing(country);
+    const page = await resolveCmsPage(prisma, slug, countryId);
+    if (!page || !page.isActive) return sendError(res, 'Page not found', 404);
     return sendSuccess(res, page, 'CMS page fetched');
   }
 
@@ -57,13 +61,37 @@ export class SeoController {
     return sendSuccess(res, pages, 'CMS pages fetched');
   }
 
+  /**
+   * `slug` alone is no longer unique (see the CmsPage model comment) — a
+   * page is now identified by (slug, countryId), null countryId meaning the
+   * global page. `countryId` in the body selects which one this write
+   * targets; omitted/null upserts the global page, matching the old
+   * single-page-per-slug behaviour for anyone not passing it.
+   *
+   * Split into two paths rather than one Prisma `upsert`: a real countryId
+   * makes (slug, countryId) a genuine unique constraint Prisma can target
+   * atomically, but a null countryId can't — see the schema comment and
+   * `resolveCmsPage()` for why. The null-countryId path does a manual
+   * find-then-write instead; it isn't atomic, but only an admin uses this
+   * endpoint, so the race window is not a real concern.
+   */
   async upsertCmsPage(req: Request, res: Response) {
-    const { slug, ...data } = req.body;
-    const page = await prisma.cmsPage.upsert({
-      where: { slug },
-      create: { slug, ...data },
-      update: data,
-    });
+    const { slug, countryId, ...data } = req.body;
+    const resolvedCountryId = countryId || null;
+
+    if (resolvedCountryId) {
+      const page = await prisma.cmsPage.upsert({
+        where: { slug_countryId: { slug, countryId: resolvedCountryId } },
+        create: { slug, countryId: resolvedCountryId, ...data },
+        update: data,
+      });
+      return sendSuccess(res, page, 'CMS page saved');
+    }
+
+    const existing = await prisma.cmsPage.findFirst({ where: { slug, countryId: null } });
+    const page = existing
+      ? await prisma.cmsPage.update({ where: { id: existing.id }, data })
+      : await prisma.cmsPage.create({ data: { slug, countryId: null, ...data } });
     return sendSuccess(res, page, 'CMS page saved');
   }
 }
