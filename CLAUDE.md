@@ -1161,8 +1161,7 @@ Verified against the code on 2026-07-27. Ordered by severity.
 
 **~~2. Frontend and backend disagree on shipping charges.~~ NOT CURRENT — corrected 2026-09-09.** This was recorded from an earlier snapshot. As of the code actually in `wood-vintage` (and, from a quick check, `unique-dressup` too), `frontend/constants/index.ts`'s `SHIPPING_METHODS` (79/149/249) matches the backend's `SHIPPING_RATES` exactly; the old mismatched `FREE_SHIPPING_THRESHOLD`/`SHIPPING_CHARGE` constants are explicitly marked "Legacy — kept so any other references don't break" and are unused in the checkout calculation. **Residual gap, not the same issue:** the backend prefers a per-product shipping-charge override (`standardShippingCharge` etc.) over the flat rate when set on a product, and the frontend's displayed shipping charge doesn't know about that override — so a product with a per-product override would still show the flat rate pre-checkout and charge the override amount. Lower severity than the original claim (order total is still server-computed correctly, only the pre-checkout *display* can be off, and only for products with an override set) — tracked in `docs/claude/technical-debt.md`, not fixed here.
 
-**3. Stock is not restored when an order is cancelled.**
-`createOrder` decrements `stockQuantity` and increments `totalSold`; `cancelOrder` only flips the status. Cancelled orders permanently leak inventory and inflate `totalSold`.
+**~~3. Stock is not restored when an order is cancelled.~~ FIXED 2026-09-09 (wood-vintage only).** `cancelOrder` now runs in a transaction restoring `stockQuantity` and reversing `totalSold` (clamped at 0) for every line item, and writes an `InventoryLog` row (see §25 #21). Verified live: a test order for 3 units moved stock 50→47→50 and `totalSold` 0→3→0 across create/cancel. Not backported to `unique-dressup`.
 
 ### 🟠 High
 
@@ -1206,7 +1205,7 @@ The Dockerfile copies `.next/standalone`, but `next.config.ts` only emits standa
 18. Declared-but-unused dependencies: `express-validator`, `@tanstack/react-table`, `zustand`, `next-themes`. Two carousel libraries (`swiper` + `react-slick`) and two toast libraries (`react-hot-toast` + `notistack`) coexist.
 19. `frontend/.env` declares `BACKEND_URL` and `NEXT_PUBLIC_API_URL` **twice** each; the last value silently wins.
 20. Uploaded files are never deleted when a product is soft-deleted — `uploads/` grows without bound.
-21. `PaymentMethod` enum includes `UPI`, `CARD`, `NET_BANKING`, which no code path sets. `ReturnRequest` and `Notification` models have no endpoints. `InventoryLog` is written nowhere despite `createOrder` changing stock.
+21. `PaymentMethod` enum includes `UPI`, `CARD`, `NET_BANKING`, which no code path sets. `ReturnRequest` and `Notification` models have no endpoints. ~~`InventoryLog` is written nowhere despite `createOrder` changing stock.~~ **FIXED 2026-09-09 (wood-vintage only)** — now written on both `createOrder` (`SALE`) and `cancelOrder` (`RETURN`).
 22. `src/jobs/`, `src/validators/`, and `docs/` are empty directories.
 23. Naming drift: PM2 app is `luxestore-api`; Razorpay checkout displays "LUXÉ Fashion"; the product JSON-LD falls back to brand "LUXÉ"; `AdminLayoutClient:175` renders a hardcoded, misspelled "Unique Dreessup".
 24. `Store` model lacks an `@@map`, so its table is `Store` while every other table is snake_case plural.
@@ -1220,10 +1219,10 @@ The Dockerfile copies `.next/standalone`, but `next.config.ts` only emits standa
 
 | Priority | Improvement |
 |---|---|
-| P0 | Server-authoritative pricing: compute subtotal, shipping, tax, and discount from the DB; return a quote the UI displays |
-| P0 | Restore stock and reverse `totalSold` on cancel/return; write `InventoryLog` rows for every stock movement |
-| P0 | Move coupon consumption to payment success; enforce `userLimit` |
-| P1 | Adopt `prisma migrate` and back-fill an initial migration |
+| ~~P0~~ | ~~Server-authoritative pricing~~ — **done 2026-09-09 (wood-vintage)**, see §13/§25 #1 |
+| ~~P0~~ | ~~Restore stock and reverse `totalSold` on cancel/return; write `InventoryLog` rows~~ — **done 2026-09-09 (wood-vintage)**, see §25 #3/#21 |
+| P0 | Move coupon consumption to payment success; enforce `userLimit` — still open |
+| ~~P1~~ | ~~Adopt `prisma migrate` and back-fill an initial migration~~ — **done 2026-09-09 (wood-vintage)**, see §13 |
 | P1 | Add ESLint + Prettier configs; wire `type-check`, `lint`, `build` into CI |
 | P1 | Introduce Jest/Supertest for order, auth, and payment paths |
 | P1 | Drive `API_URL` from `NEXT_PUBLIC_API_URL`; delete the stray `console.log`s |
