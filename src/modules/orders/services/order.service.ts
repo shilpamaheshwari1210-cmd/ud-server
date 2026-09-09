@@ -4,6 +4,7 @@ import { AppError } from '../../../middlewares/error.middleware';
 import { generateOrderNumber } from '../../../utils/slugify';
 import { paginationParams } from '../../../utils/slugify';
 import { logger } from '../../../utils/logger';
+import { resolveCountryByCode, getCountryPricingMap } from '../../../utils/countryPricing';
 
 export class OrderService {
   private static readonly SHIPPING_RATES: Record<string, number> = {
@@ -97,8 +98,17 @@ export class OrderService {
     items: { productId: string; variantId?: string; quantity: number; price?: number }[];
     shippingAddress: object;
     billingAddress?: object;
+    // ISO 3166-1 alpha-2 country code. Same server-authoritative rule as
+    // price: this selects WHICH DB-derived price to charge, it never carries
+    // a price value itself. An unknown code is a real error here (unlike the
+    // product browse endpoints) — real money is about to move.
+    country?: string;
   }) {
     return prisma.$transaction(async (tx) => {
+      // 0. Resolve the country, if one was sent, before anything else — an
+      // unknown code should fail the order up front, not half way through.
+      const country = data.country ? await resolveCountryByCode(tx, data.country) : null;
+
       // 1. Fetch products and validate stock before touching any data
       const productIds = [...new Set(data.items.map(i => i.productId))];
       const products = await tx.product.findMany({
@@ -135,17 +145,28 @@ export class OrderService {
         }
       }
 
+      // Country-specific price overrides, if a country was resolved above.
+      // Same DB-derived-only rule as everything else here — this is only ever
+      // looked up by (product, country), never taken from the request body.
+      const countryPricingMap = country
+        ? await getCountryPricingMap(tx, country.id, productIds)
+        : new Map<string, { basePrice: Prisma.Decimal; salePrice: Prisma.Decimal | null }>();
+
       // 2. Compute totals — price is ALWAYS re-derived from the database here,
       // never taken from data.items[].price. That field arrives from the
       // browser and a crafted request could set it to anything; trusting it
       // would let a customer name their own price. Same effective-price rule
       // cart.controller.ts uses, so what the cart showed is what gets charged:
-      // variant.price if the line has a variant and it has one set, else the
-      // product's salePrice, else its basePrice.
+      // variant.price if the line has a variant and it has one set, else a
+      // ProductCountryPricing override for the resolved country if one
+      // exists, else the product's salePrice, else its basePrice.
       const effectivePrice = (productId: string, variantId?: string): number => {
         const product = productMap.get(productId)!;
         const variant = variantId ? variantMap.get(variantId) : undefined;
-        return Number(variant?.price ?? product.salePrice ?? product.basePrice);
+        if (variant?.price != null) return Number(variant.price);
+        const countryOverride = countryPricingMap.get(productId);
+        if (countryOverride) return Number(countryOverride.salePrice ?? countryOverride.basePrice);
+        return Number(product.salePrice ?? product.basePrice);
       };
       const subtotal = data.items.reduce(
         (sum, item) => sum + effectivePrice(item.productId, item.variantId) * item.quantity,

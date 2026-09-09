@@ -223,20 +223,22 @@ model Product {
   updatedAt              DateTime  @updatedAt
   deletedAt              DateTime?
 
-  images          ProductImage[]
-  variants        ProductVariant[]
-  tags            ProductTag[]
-  badges          ProductBadge[]
-  faqs            ProductFaq[]
-  reviews         Review[]
-  collections     ProductCollection[]
-  cartItems       CartItem[]
-  wishlistItems   WishlistItem[]
-  orderItems      OrderItem[]
-  recentlyViewed  RecentlyViewed[]
-  relatedProducts RelatedProduct[]    @relation("ProductRelations")
-  relatedTo       RelatedProduct[]    @relation("RelatedTo")
-  inventoryLogs   InventoryLog[]
+  images              ProductImage[]
+  variants            ProductVariant[]
+  tags                ProductTag[]
+  badges              ProductBadge[]
+  faqs                ProductFaq[]
+  reviews             Review[]
+  collections         ProductCollection[]
+  cartItems           CartItem[]
+  wishlistItems       WishlistItem[]
+  orderItems          OrderItem[]
+  recentlyViewed      RecentlyViewed[]
+  relatedProducts     RelatedProduct[]              @relation("ProductRelations")
+  relatedTo           RelatedProduct[]              @relation("RelatedTo")
+  inventoryLogs       InventoryLog[]
+  countryPricing      ProductCountryPricing[]
+  countryAvailability ProductCountryAvailability[]
 
   @@index([slug])
   @@index([categoryId])
@@ -690,11 +692,17 @@ model Banner {
   sortOrder   Int        @default(0)
   startsAt    DateTime?
   expiresAt   DateTime?
+  /// Null = shown globally (every market). Set = only shown for that country
+  /// — the Global -> Country content-inheritance tier from the country
+  /// architecture spec.
+  countryId   String?
+  country     Country?   @relation(fields: [countryId], references: [id])
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@index([type, isActive])
   @@index([gender])
+  @@index([countryId])
   @@map("banners")
 }
 
@@ -715,10 +723,14 @@ model HomepageSection {
   config    Json?
   isActive  Boolean             @default(true)
   sortOrder Int                 @default(0)
+  /// Null = shown globally (every market). Set = only shown for that country.
+  countryId String?
+  country   Country?            @relation(fields: [countryId], references: [id])
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
 
   @@index([type, isActive])
+  @@index([countryId])
   @@map("homepage_sections")
 }
 
@@ -891,10 +903,14 @@ model CmsPage {
   sortOrder    Int      @default(0)
   metaTitle    String?
   metaDesc     String?  @db.Text
+  /// Null = shown globally (every market). Set = only shown for that country.
+  countryId    String?
+  country      Country? @relation(fields: [countryId], references: [id])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([slug])
+  @@index([countryId])
   @@map("cms_pages")
 }
 
@@ -1054,4 +1070,63 @@ model EmailOtp {
 
   @@index([expiresAt])
   @@map("email_otps")
+}
+
+// ─────────────────────────────────────────────
+// COUNTRY / INTERNATIONALIZATION
+//
+// See documentation/docs/architecture/country-architecture-spec.md.
+// Deliberately minimal: pricing + availability overrides, and a nullable
+// content-scoping FK on HomepageSection/Banner/CmsPage. Shipping/tax rule
+// engines are out of scope for this pass (Phase 3).
+// ─────────────────────────────────────────────
+
+model Country {
+  id             String   @id @default(uuid())
+  code           String   @unique // ISO 3166-1 alpha-2: "IN", "US", "AE", ...
+  name           String
+  currency       String // ISO 4217: "INR", "USD", "AED", ...
+  currencySymbol String
+  locale         String // "en-IN", "en-US", ...
+  timezone       String
+  isEnabled      Boolean  @default(false) // admin turns markets on explicitly
+  isDefault      Boolean  @default(false) // exactly one row should be true; enforced in code, not DB
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  pricingRules     ProductCountryPricing[]
+  availability     ProductCountryAvailability[]
+  homepageSections HomepageSection[]
+  banners          Banner[]
+  cmsPages         CmsPage[]
+
+  @@map("countries")
+}
+
+model ProductCountryPricing {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  countryId String
+  country   Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  basePrice Decimal  @db.Decimal(10, 2)
+  salePrice Decimal? @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, countryId])
+  @@map("product_country_pricing")
+}
+
+model ProductCountryAvailability {
+  id          String  @id @default(uuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  countryId   String
+  country     Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  isAvailable Boolean @default(true)
+
+  @@unique([productId, countryId])
+  @@map("product_country_availability")
 }

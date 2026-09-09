@@ -190,7 +190,7 @@ export class ProductController {
     const {
       page, limit, search, categoryId, categorySlug, collectionSlug, collectionId,
       minPrice, maxPrice, sizes, colors, brands, isFeatured, isTrending,
-      isNewArrival, isBestSeller, inStock, rating, sortBy, gender,
+      isNewArrival, isBestSeller, inStock, rating, sortBy, gender, country,
     } = req.query as Record<string, string>;
 
     const parseBool = (v: string | undefined) =>
@@ -211,6 +211,7 @@ export class ProductController {
       rating: rating ? Number(rating) : undefined,
       sortBy: sortBy as any,
       gender: gender || undefined,
+      country: country || undefined,
     });
 
     return sendPaginated(res, result.products, result.total, result.page, result.limit);
@@ -218,7 +219,8 @@ export class ProductController {
 
   async getProductBySlug(req: Request, res: Response) {
     const { slug } = req.params;
-    const product = await productService.getProductBySlug(slug);
+    const { country } = req.query as Record<string, string>;
+    const product = await productService.getProductBySlug(slug, country || undefined);
     return sendSuccess(res, product, 'Product fetched');
   }
 

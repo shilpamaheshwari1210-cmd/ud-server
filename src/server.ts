@@ -103,6 +103,26 @@ const INIT_SEO = [
   { page: 'blog',  metaTitle: 'Fashion Blog | Unique Dressup',           metaDesc: 'Stay updated with the latest fashion trends, styling tips and outfit inspiration.',                                                             robots: 'index, follow' },
 ];
 
+// The 8 launch markets from MASTER-PROMPT.md §0/§7. ISO code/currency/locale/
+// timezone data is the real reference table compiled in
+// documentation/docs/countries/launch-markets-reference.md — not invented
+// here. India is the only market with real data today (the platform's
+// existing single-market operation), so it is the sole isEnabled + isDefault
+// row; the other 7 are seeded disabled — admin turns each on explicitly once
+// it's ready (per the architecture spec's "admin turns markets on" design).
+// US and AU each span multiple timezones; a single representative zone is
+// used per the reference doc's note (America/New_York, Australia/Sydney).
+const INIT_COUNTRIES = [
+  { code: 'IN', name: 'India',                 currency: 'INR', currencySymbol: '₹',  locale: 'en-IN', timezone: 'Asia/Kolkata',        isEnabled: true,  isDefault: true,  sortOrder: 0 },
+  { code: 'AE', name: 'United Arab Emirates',   currency: 'AED', currencySymbol: 'د.إ', locale: 'en-AE', timezone: 'Asia/Dubai',          isEnabled: false, isDefault: false, sortOrder: 1 },
+  { code: 'US', name: 'United States',          currency: 'USD', currencySymbol: '$',  locale: 'en-US', timezone: 'America/New_York',    isEnabled: false, isDefault: false, sortOrder: 2 },
+  { code: 'AU', name: 'Australia',              currency: 'AUD', currencySymbol: '$',  locale: 'en-AU', timezone: 'Australia/Sydney',    isEnabled: false, isDefault: false, sortOrder: 3 },
+  { code: 'GB', name: 'United Kingdom',         currency: 'GBP', currencySymbol: '£',  locale: 'en-GB', timezone: 'Europe/London',       isEnabled: false, isDefault: false, sortOrder: 4 },
+  { code: 'DE', name: 'Germany',                currency: 'EUR', currencySymbol: '€',  locale: 'de-DE', timezone: 'Europe/Berlin',       isEnabled: false, isDefault: false, sortOrder: 5 },
+  { code: 'FR', name: 'France',                 currency: 'EUR', currencySymbol: '€',  locale: 'fr-FR', timezone: 'Europe/Paris',        isEnabled: false, isDefault: false, sortOrder: 6 },
+  { code: 'NL', name: 'Netherlands',             currency: 'EUR', currencySymbol: '€',  locale: 'nl-NL', timezone: 'Europe/Amsterdam',    isEnabled: false, isDefault: false, sortOrder: 7 },
+];
+
 const INIT_CMS_PAGES = [
   { title: 'About Us',           slug: 'about',           content: '<h1>About Unique Dressup</h1><p>Unique Dressup is a trendy D2C fashion brand based in India. We bring you affordable, stylish clothing for every occasion — from everyday casuals to special celebrations.</p>',                       isActive: true, showInFooter: false, showInNav: false, sortOrder: 0 },
   { title: 'Privacy Policy',     slug: 'privacy-policy',  content: '<h1>Privacy Policy</h1><p>Your privacy is important to us. This Privacy Policy explains how Unique Dressup collects, uses, and protects your personal information when you use our website and services.</p>',                      isActive: true, showInFooter: true,  showInNav: false, sortOrder: 1 },
@@ -207,6 +227,10 @@ async function initDatabase() {
 
   // 10. CMS pages (unique by slug)
   await prisma.cmsPage.createMany({ data: INIT_CMS_PAGES, skipDuplicates: true });
+
+  // 11. Countries (unique by code) — the 8 launch markets, India enabled +
+  // default, the rest seeded disabled for admin to turn on later.
+  await prisma.country.createMany({ data: INIT_COUNTRIES, skipDuplicates: true });
 
   logger.info('Database initialised');
 }

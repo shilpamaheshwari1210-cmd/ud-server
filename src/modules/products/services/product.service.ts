@@ -5,6 +5,7 @@ import { AppError } from '../../../middlewares/error.middleware';
 import { createSlug } from '../../../utils/slugify';
 import { colorNameToHex } from '../../../utils/colorName';
 import { paginationParams } from '../../../utils/slugify';
+import { resolveCountryByCode, applyCountryOverrides } from '../../../utils/countryPricing';
 
 export interface ProductFilters {
   page?: number;
@@ -27,6 +28,31 @@ export interface ProductFilters {
   rating?: number;
   gender?: string;
   sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'rating' | 'name';
+  /**
+   * ISO 3166-1 alpha-2 country code from `?country=`. Resolved to a
+   * ProductCountryPricing/ProductCountryAvailability override per product —
+   * see country-architecture-spec.md. Unknown/unrecognised codes are ignored
+   * (public browsing must not 400 on a bad query param) rather than thrown,
+   * unlike the order-placement path, which is server-authoritative and does
+   * throw on an unknown country.
+   */
+  country?: string;
+}
+
+/**
+ * Resolves `?country=` to a Country id for the storefront browse endpoints.
+ * A code that does not match any row degrades to "no country" (base pricing,
+ * default availability) instead of failing the request — this is a read-only
+ * listing, not money changing hands.
+ */
+async function resolveCountryIdForBrowsing(code?: string): Promise<string | null> {
+  if (!code) return null;
+  try {
+    const country = await resolveCountryByCode(prisma, code);
+    return country?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -149,7 +175,7 @@ export class ProductService {
       default:           orderBy = inCategory ? byPriority() : [{ createdAt: 'desc' }];
     }
 
-    const [total, products] = await Promise.all([
+    const [total, rawProducts] = await Promise.all([
       prisma.product.count({ where }),
       prisma.product.findMany({
         where,
@@ -164,6 +190,9 @@ export class ProductService {
         },
       }),
     ]);
+
+    const countryId = await resolveCountryIdForBrowsing(filters.country);
+    const products = await applyCountryOverrides(rawProducts, countryId);
 
     return { products, total, page, limit };
   }
@@ -271,7 +300,7 @@ export class ProductService {
     });
   }
 
-  async getProductBySlug(slug: string) {
+  async getProductBySlug(slug: string, country?: string) {
     const product = await prisma.product.findFirst({
       where: { slug, isActive: true, deletedAt: null },
       include: {
@@ -338,7 +367,10 @@ export class ProductService {
       });
     }
 
-    return { ...product, suggestedProducts: suggested };
+    const countryId = await resolveCountryIdForBrowsing(country);
+    const [priced] = await applyCountryOverrides([product], countryId);
+
+    return { ...priced, suggestedProducts: suggested };
   }
 
   async createProduct(data: Prisma.ProductCreateInput & {

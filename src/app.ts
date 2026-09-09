@@ -40,6 +40,7 @@ import instagramReelsRoutes from './modules/instagram-reels/routes/instagram-ree
 import returnRoutes from './modules/returns/routes/return.routes';
 import navMenuRoutes from './modules/nav-menus/routes/nav-menu.routes';
 import imageRoutes from './modules/images/routes/image.routes';
+import countryRoutes from './modules/countries/routes/country.routes';
 
 const app = express();
 
@@ -192,6 +193,7 @@ app.use(`${v1}/stores`, storeRoutes);
 app.use(`${v1}/instagram-reels`, instagramReelsRoutes);
 app.use(`${v1}/returns`, returnRoutes);
 app.use(`${v1}/nav-menus`, navMenuRoutes);
+app.use(`${v1}/countries`, countryRoutes);
 
 // 404 & error handler
 app.use(notFound);
