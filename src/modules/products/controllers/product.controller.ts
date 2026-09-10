@@ -45,12 +45,17 @@ const parseNum = (val: any): number | undefined => {
 const sanitizeProductBody = (body: any) => {
   const b = { ...body };
   // Booleans
-  for (const k of ['isFeatured','isTrending','isNewArrival','isBestSeller','isActive','trackInventory']) {
+  for (const k of ['isFeatured','isTrending','isNewArrival','isBestSeller','isActive','trackInventory','assemblyRequired','isCustomizable']) {
     if (k in b) b[k] = parseBool(b[k]);
   }
   // Numbers
-  for (const k of ['basePrice','salePrice','stockQuantity','sortOrder','taxPercent','costPrice','weight','lowStockAlert','standardShippingCharge','codShippingCharge','expressShippingCharge']) {
+  for (const k of ['basePrice','salePrice','stockQuantity','sortOrder','taxPercent','costPrice','weight','lowStockAlert','standardShippingCharge','codShippingCharge','expressShippingCharge','lengthCm','widthCm','heightCm','manufacturingTimeDays']) {
     if (k in b) b[k] = parseNum(b[k]);
+  }
+  // Phase 2 handicraft domain relations — empty string means "unset", not a
+  // literal foreign key of "".
+  for (const k of ['materialId','styleId','roomId','artisanId']) {
+    if (k in b) b[k] = b[k] ? String(b[k]) : null;
   }
   // Arrays
   b.tags = parseArray(b.tags);
@@ -189,6 +194,7 @@ export class ProductController {
   async getProducts(req: Request, res: Response) {
     const {
       page, limit, search, categoryId, categorySlug, collectionSlug, collectionId,
+      materialSlug, styleSlug, roomSlug,
       minPrice, maxPrice, sizes, colors, brands, isFeatured, isTrending,
       isNewArrival, isBestSeller, inStock, rating, sortBy, gender, country,
     } = req.query as Record<string, string>;
@@ -198,6 +204,9 @@ export class ProductController {
 
     const result = await productService.getProducts({
       page: Number(page), limit: Number(limit), search, categoryId, categorySlug, collectionSlug, collectionId,
+      materialSlug: materialSlug || undefined,
+      styleSlug: styleSlug || undefined,
+      roomSlug: roomSlug || undefined,
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       sizes: sizes?.split(','),

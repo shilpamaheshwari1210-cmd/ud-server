@@ -41,6 +41,10 @@ import returnRoutes from './modules/returns/routes/return.routes';
 import navMenuRoutes from './modules/nav-menus/routes/nav-menu.routes';
 import imageRoutes from './modules/images/routes/image.routes';
 import countryRoutes from './modules/countries/routes/country.routes';
+import materialRoutes from './modules/materials/routes/material.routes';
+import styleRoutes from './modules/styles/routes/style.routes';
+import roomRoutes from './modules/rooms/routes/room.routes';
+import artisanRoutes from './modules/artisans/routes/artisan.routes';
 
 const app = express();
 
@@ -194,6 +198,10 @@ app.use(`${v1}/instagram-reels`, instagramReelsRoutes);
 app.use(`${v1}/returns`, returnRoutes);
 app.use(`${v1}/nav-menus`, navMenuRoutes);
 app.use(`${v1}/countries`, countryRoutes);
+app.use(`${v1}/materials`, materialRoutes);
+app.use(`${v1}/styles`, styleRoutes);
+app.use(`${v1}/rooms`, roomRoutes);
+app.use(`${v1}/artisans`, artisanRoutes);
 
 // 404 & error handler
 app.use(notFound);

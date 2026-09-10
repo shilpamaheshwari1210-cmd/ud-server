@@ -223,6 +223,30 @@ model Product {
   updatedAt              DateTime  @updatedAt
   deletedAt              DateTime?
 
+  // ── Handicraft domain (Phase 2) — additive, all nullable ────────────────
+  materialId             String?
+  material               Material? @relation(fields: [materialId], references: [id])
+  styleId                String?
+  style                  Style?    @relation(fields: [styleId], references: [id])
+  roomId                 String?
+  room                   Room?     @relation(fields: [roomId], references: [id])
+  artisanId              String?
+  artisan                Artisan?  @relation(fields: [artisanId], references: [id])
+
+  lengthCm               Decimal?  @db.Decimal(8, 2)
+  widthCm                Decimal?  @db.Decimal(8, 2)
+  heightCm               Decimal?  @db.Decimal(8, 2)
+  finish                 String?
+  assemblyRequired       Boolean   @default(false)
+  assemblyInstructions   String?   @db.Text
+
+  isCustomizable         Boolean   @default(false)
+  customizationNotes     String?   @db.Text
+
+  manufacturingTimeDays  Int?
+
+  craftStory             String?   @db.LongText
+
   images              ProductImage[]
   variants            ProductVariant[]
   tags                ProductTag[]
@@ -246,6 +270,10 @@ model Product {
   @@index([isActive, isTrending])
   @@index([isActive, isNewArrival])
   @@index([gender])
+  @@index([materialId])
+  @@index([styleId])
+  @@index([roomId])
+  @@index([artisanId])
   @@map("products")
 }
 
@@ -1140,4 +1168,72 @@ model ProductCountryAvailability {
 
   @@unique([productId, countryId])
   @@map("product_country_availability")
+}
+
+// ─────────────────────────────────────────────
+// HANDICRAFT DOMAIN (Phase 2) — see
+// documentation/docs/architecture/phase-2-handicraft-domain-spec.md
+// Material/Style/Room are lightweight taxonomies shaped like Category
+// (single-select on Product, admin-CRUDable, no code change to add a value).
+// Artisan is a separate reusable entity ("who made it"), not a Product field.
+// ─────────────────────────────────────────────
+
+model Material {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?   @db.Text
+  image       String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([slug])
+  @@map("materials")
+}
+
+model Style {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?   @db.Text
+  image       String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([slug])
+  @@map("styles")
+}
+
+model Room {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?   @db.Text
+  image       String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([slug])
+  @@map("rooms")
+}
+
+model Artisan {
+  id       String    @id @default(uuid())
+  name     String
+  bio      String?   @db.Text
+  photo    String?
+  region   String?
+  isActive Boolean   @default(true)
+  products Product[]
+
+  @@map("artisans")
 }

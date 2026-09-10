@@ -15,6 +15,10 @@ export interface ProductFilters {
   categorySlug?: string;
   collectionSlug?: string;
   collectionId?: string;
+  /** Phase 2 handicraft domain — see phase-2-handicraft-domain-spec.md */
+  materialSlug?: string;
+  styleSlug?: string;
+  roomSlug?: string;
   minPrice?: number;
   maxPrice?: number;
   sizes?: string[];
@@ -105,6 +109,9 @@ export class ProductService {
     // was being dropped silently, leaving every collection showing the entire
     // catalogue. An id also survives a rename, where a slug does not.
     if (filters.collectionId) where.collections = { some: { collectionId: filters.collectionId } };
+    if (filters.materialSlug) where.material = { slug: filters.materialSlug };
+    if (filters.styleSlug) where.style = { slug: filters.styleSlug };
+    if (filters.roomSlug) where.room = { slug: filters.roomSlug };
     if (filters.isFeatured !== undefined) where.isFeatured = filters.isFeatured;
     if (filters.isTrending !== undefined) where.isTrending = filters.isTrending;
     if (filters.isNewArrival !== undefined) where.isNewArrival = filters.isNewArrival;
@@ -169,6 +176,10 @@ export class ProductService {
         include: {
           images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
           category: { select: { id: true, name: true, slug: true } },
+          material: { select: { id: true, name: true, slug: true } },
+          style: { select: { id: true, name: true, slug: true } },
+          room: { select: { id: true, name: true, slug: true } },
+          artisan: { select: { id: true, name: true, region: true } },
           variants: { where: { isActive: true }, select: { size: true, color: true, colorHex: true, stockQuantity: true } },
           badges: true,
         },
@@ -249,6 +260,10 @@ export class ProductService {
         include: {
           images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
           category: { select: { id: true, name: true, slug: true } },
+          material: { select: { id: true, name: true, slug: true } },
+          style: { select: { id: true, name: true, slug: true } },
+          room: { select: { id: true, name: true, slug: true } },
+          artisan: { select: { id: true, name: true, region: true } },
           _count: { select: { variants: true } },
         },
       }),
@@ -290,6 +305,10 @@ export class ProductService {
       include: {
         images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
         category: { select: { id: true, name: true, slug: true } },
+        material: true,
+        style: true,
+        room: true,
+        artisan: true,
         variants: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
         tags: true,
         badges: true,
@@ -382,7 +401,10 @@ export class ProductService {
           create: collectionIds.map((collectionId: string) => ({ collectionId })),
         } : undefined,
       },
-      include: { images: true, variants: true, tags: true },
+      include: {
+        images: true, variants: true, tags: true,
+        material: true, style: true, room: true, artisan: true,
+      },
     });
 
     return product;
@@ -394,6 +416,10 @@ export class ProductService {
       include: {
         images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
         category: { select: { id: true, name: true, slug: true } },
+        material: true,
+        style: true,
+        room: true,
+        artisan: true,
         variants: { orderBy: [{ color: 'asc' }, { sortOrder: 'asc' }] },
         tags: true,
         badges: true,
@@ -564,7 +590,11 @@ export class ProductService {
           },
         }),
       },
-      include: { images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }, variants: true, tags: true, badges: true },
+      include: {
+        images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        variants: true, tags: true, badges: true,
+        material: true, style: true, room: true, artisan: true,
+      },
     });
 
     // Position is the single source of truth; isPrimary is derived from it.

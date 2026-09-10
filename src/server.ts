@@ -123,6 +123,26 @@ const INIT_COUNTRIES = [
   { code: 'NL', name: 'Netherlands',             currency: 'EUR', currencySymbol: '€',  locale: 'nl-NL', timezone: 'Europe/Amsterdam',    isEnabled: false, isDefault: false, sortOrder: 7 },
 ];
 
+// Handicraft domain taxonomies (MASTER-PROMPT §16). Materials and Styles are
+// the exact lists from the master prompt; Room has no explicit list there, so
+// this is a reasonable starting set inferred from common furniture-room
+// categories (see phase-2-handicraft-domain-spec.md and the backend session
+// report for the judgment call).
+const INIT_MATERIALS = [
+  'Sheesham', 'Mango Wood', 'Teak', 'Acacia', 'Reclaimed Wood', 'Oak', 'Pine',
+  'Rattan', 'Cane', 'Metal', 'Wood + Metal',
+];
+
+const INIT_STYLES = [
+  'Rustic', 'Modern', 'Contemporary', 'Traditional', 'Industrial', 'Vintage',
+  'Bohemian', 'Scandinavian', 'Minimalist', 'Colonial', 'Indian Heritage',
+];
+
+const INIT_ROOMS = [
+  'Living Room', 'Bedroom', 'Dining Room', 'Kitchen', 'Home Office',
+  'Outdoor & Patio', 'Entryway', 'Kids Room',
+];
+
 const INIT_CMS_PAGES = [
   { title: 'About Us',           slug: 'about',           content: '<h1>About Unique Dressup</h1><p>Unique Dressup is a trendy D2C fashion brand based in India. We bring you affordable, stylish clothing for every occasion — from everyday casuals to special celebrations.</p>',                       isActive: true, showInFooter: false, showInNav: false, sortOrder: 0 },
   { title: 'Privacy Policy',     slug: 'privacy-policy',  content: '<h1>Privacy Policy</h1><p>Your privacy is important to us. This Privacy Policy explains how Unique Dressup collects, uses, and protects your personal information when you use our website and services.</p>',                      isActive: true, showInFooter: true,  showInNav: false, sortOrder: 1 },
@@ -231,6 +251,22 @@ async function initDatabase() {
   // 11. Countries (unique by code) — the 8 launch markets, India enabled +
   // default, the rest seeded disabled for admin to turn on later.
   await prisma.country.createMany({ data: INIT_COUNTRIES, skipDuplicates: true });
+
+  // 12-14. Handicraft taxonomies (unique by slug). Artisan is deliberately
+  // left unseeded — no real artisan data exists yet, so an empty table is
+  // correct rather than seeding placeholders.
+  await prisma.material.createMany({
+    data: INIT_MATERIALS.map((name, i) => ({ name, slug: toSlug(name), isActive: true, sortOrder: i })),
+    skipDuplicates: true,
+  });
+  await prisma.style.createMany({
+    data: INIT_STYLES.map((name, i) => ({ name, slug: toSlug(name), isActive: true, sortOrder: i })),
+    skipDuplicates: true,
+  });
+  await prisma.room.createMany({
+    data: INIT_ROOMS.map((name, i) => ({ name, slug: toSlug(name), isActive: true, sortOrder: i })),
+    skipDuplicates: true,
+  });
 
   logger.info('Database initialised');
 }
