@@ -299,6 +299,49 @@ export class ProductService {
     });
   }
 
+  /**
+   * Real co-purchase recommendations: products that appeared in the same
+   * orders as `productId`, ranked by how often that happened. Two-step
+   * because Prisma's `groupBy` can't join back to the order that produced
+   * the count — first the orders this product shipped in, then which other
+   * products those same orders contained.
+   */
+  async getFrequentlyBoughtWith(productId: string, limit = 8) {
+    // Cancelled/returned/refunded orders aren't a real "bought together"
+    // signal — excluded so a cancelled test order (or a genuine return)
+    // never surfaces a false affinity.
+    const liveOrder: Prisma.OrderWhereInput = { status: { notIn: ['CANCELLED', 'RETURNED', 'REFUNDED'] } };
+
+    const orders = await prisma.orderItem.findMany({
+      where: { productId, order: liveOrder },
+      select: { orderId: true },
+      distinct: ['orderId'],
+    });
+    if (!orders.length) return [];
+
+    const grouped = await prisma.orderItem.groupBy({
+      by: ['productId'],
+      where: { orderId: { in: orders.map(o => o.orderId) }, productId: { not: productId }, order: liveOrder },
+      _count: { productId: true },
+      orderBy: { _count: { productId: 'desc' } },
+      take: limit,
+    });
+    if (!grouped.length) return [];
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: grouped.map(g => g.productId) }, isActive: true, deletedAt: null },
+      include: {
+        images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1 },
+        variants: { where: { isActive: true }, select: { color: true, size: true } },
+        category: { select: { id: true, name: true, slug: true } },
+      },
+    });
+
+    // groupBy's ordering is lost by findMany's `in` — restore it by rank.
+    const rank = new Map(grouped.map((g, i) => [g.productId, i]));
+    return products.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  }
+
   async getProductBySlug(slug: string, country?: string) {
     const product = await prisma.product.findFirst({
       where: { slug, isActive: true, deletedAt: null },
@@ -347,27 +390,36 @@ export class ProductService {
      * browsing. A curated list still wins where it exists; this only covers
      * the gap.
      *
-     * Same category, best sellers first, then the category's own curated
-     * priority — so this row agrees with the ordering the admin already
-     * controls rather than inventing a second opinion.
+     * Real "frequently bought together" (from actual order co-occurrence)
+     * ranks first — see phase-4-experience-spec.md §4 (Recommendations) —
+     * then same-category best sellers fill any remaining slots, so a
+     * brand-new catalogue with no order history yet still gets a sensible
+     * row instead of an empty one.
      */
     let suggested: any[] = [];
-    if (!product.relatedProducts?.length && product.categoryId) {
-      suggested = await prisma.product.findMany({
-        where: {
-          categoryId: product.categoryId,
-          id: { not: product.id },
-          isActive: true,
-          deletedAt: null,
-        },
-        orderBy: [{ totalSold: 'desc' }, { sortOrder: 'desc' }, { createdAt: 'desc' }],
-        take: 8,
-        include: {
-          images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1 },
-          variants: { where: { isActive: true }, select: { color: true, size: true } },
-          category: { select: { id: true, name: true, slug: true } },
-        },
-      });
+    if (!product.relatedProducts?.length) {
+      const frequentlyBought = await this.getFrequentlyBoughtWith(product.id, 8);
+      suggested = frequentlyBought;
+
+      if (suggested.length < 8 && product.categoryId) {
+        const exclude = [product.id, ...suggested.map(p => p.id)];
+        const fallback = await prisma.product.findMany({
+          where: {
+            categoryId: product.categoryId,
+            id: { notIn: exclude },
+            isActive: true,
+            deletedAt: null,
+          },
+          orderBy: [{ totalSold: 'desc' }, { sortOrder: 'desc' }, { createdAt: 'desc' }],
+          take: 8 - suggested.length,
+          include: {
+            images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1 },
+            variants: { where: { isActive: true }, select: { color: true, size: true } },
+            category: { select: { id: true, name: true, slug: true } },
+          },
+        });
+        suggested = [...suggested, ...fallback];
+      }
     }
 
     const countryId = await resolveCountryIdForBrowsing(country);
