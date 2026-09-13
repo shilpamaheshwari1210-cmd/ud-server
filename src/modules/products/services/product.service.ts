@@ -519,6 +519,92 @@ export class ProductService {
     await prisma.productVariant.delete({ where: { id: variantId } });
   }
 
+  /**
+   * Country pricing/availability overrides — see
+   * documentation/docs/architecture/country-architecture-spec.md and
+   * documentation/docs/decisions/0016-country-admin-ui.md (this endpoint
+   * didn't exist yet when that admin screen was built; it's what makes the
+   * "Country Pricing & Availability" product-form section from the spec
+   * possible). One row per (product, country) in each table — "set" is an
+   * upsert, matching the not-every-product-needs-one design from
+   * countryPricing.ts's resolution logic: no row for a country just means
+   * that country uses the product's base price / is available by default.
+   */
+  async getCountryPricing(productId: string) {
+    const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+    if (!product) throw new AppError('Product not found', 404);
+    return prisma.productCountryPricing.findMany({
+      where: { productId },
+      include: { country: { select: { id: true, code: true, name: true, currencySymbol: true } } },
+      orderBy: { country: { sortOrder: 'asc' } },
+    });
+  }
+
+  async setCountryPricing(productId: string, countryId: string, data: { basePrice: number; salePrice?: number | null }) {
+    const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+    if (!product) throw new AppError('Product not found', 404);
+    const country = await prisma.country.findUnique({ where: { id: countryId } });
+    if (!country) throw new AppError('Country not found', 404);
+    if (data.basePrice === undefined || data.basePrice === null || Number.isNaN(Number(data.basePrice))) {
+      throw new AppError('basePrice is required', 422);
+    }
+
+    return prisma.productCountryPricing.upsert({
+      where: { productId_countryId: { productId, countryId } },
+      create: {
+        productId,
+        countryId,
+        basePrice: Number(data.basePrice),
+        salePrice: data.salePrice !== undefined && data.salePrice !== null && data.salePrice !== ('' as any)
+          ? Number(data.salePrice) : null,
+      },
+      update: {
+        basePrice: Number(data.basePrice),
+        salePrice: data.salePrice !== undefined && data.salePrice !== null && data.salePrice !== ('' as any)
+          ? Number(data.salePrice) : null,
+      },
+    });
+  }
+
+  async deleteCountryPricing(productId: string, countryId: string) {
+    const existing = await prisma.productCountryPricing.findUnique({
+      where: { productId_countryId: { productId, countryId } },
+    });
+    if (!existing) throw new AppError('No pricing override found for this country', 404);
+    await prisma.productCountryPricing.delete({ where: { id: existing.id } });
+  }
+
+  async getCountryAvailability(productId: string) {
+    const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+    if (!product) throw new AppError('Product not found', 404);
+    return prisma.productCountryAvailability.findMany({
+      where: { productId },
+      include: { country: { select: { id: true, code: true, name: true } } },
+      orderBy: { country: { sortOrder: 'asc' } },
+    });
+  }
+
+  async setCountryAvailability(productId: string, countryId: string, isAvailable: boolean) {
+    const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+    if (!product) throw new AppError('Product not found', 404);
+    const country = await prisma.country.findUnique({ where: { id: countryId } });
+    if (!country) throw new AppError('Country not found', 404);
+
+    return prisma.productCountryAvailability.upsert({
+      where: { productId_countryId: { productId, countryId } },
+      create: { productId, countryId, isAvailable: Boolean(isAvailable) },
+      update: { isAvailable: Boolean(isAvailable) },
+    });
+  }
+
+  async deleteCountryAvailability(productId: string, countryId: string) {
+    const existing = await prisma.productCountryAvailability.findUnique({
+      where: { productId_countryId: { productId, countryId } },
+    });
+    if (!existing) throw new AppError('No availability override found for this country', 404);
+    await prisma.productCountryAvailability.delete({ where: { id: existing.id } });
+  }
+
   async updateProduct(id: string, data: any) {
     const product = await prisma.product.findFirst({ where: { id, deletedAt: null } });
     if (!product) throw new AppError('Product not found', 404);

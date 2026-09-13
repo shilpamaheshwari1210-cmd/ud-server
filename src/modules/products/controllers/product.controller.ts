@@ -357,6 +357,43 @@ export class ProductController {
     await productService.deleteVariant(id, vid);
     return sendSuccess(res, null, 'Variant deleted');
   }
+
+  async getCountryPricing(req: Request, res: Response) {
+    const { id } = req.params;
+    const rows = await productService.getCountryPricing(id);
+    return sendSuccess(res, rows, 'Country pricing fetched');
+  }
+
+  async setCountryPricing(req: Request, res: Response) {
+    const { id, countryId } = req.params;
+    const row = await productService.setCountryPricing(id, countryId, req.body);
+    return sendSuccess(res, row, 'Country pricing saved');
+  }
+
+  async deleteCountryPricing(req: Request, res: Response) {
+    const { id, countryId } = req.params;
+    await productService.deleteCountryPricing(id, countryId);
+    return sendSuccess(res, null, 'Country pricing override removed');
+  }
+
+  async getCountryAvailability(req: Request, res: Response) {
+    const { id } = req.params;
+    const rows = await productService.getCountryAvailability(id);
+    return sendSuccess(res, rows, 'Country availability fetched');
+  }
+
+  async setCountryAvailability(req: Request, res: Response) {
+    const { id, countryId } = req.params;
+    const isAvailable = req.body.isAvailable === true || req.body.isAvailable === 'true';
+    const row = await productService.setCountryAvailability(id, countryId, isAvailable);
+    return sendSuccess(res, row, 'Country availability saved');
+  }
+
+  async deleteCountryAvailability(req: Request, res: Response) {
+    const { id, countryId } = req.params;
+    await productService.deleteCountryAvailability(id, countryId);
+    return sendSuccess(res, null, 'Country availability override removed');
+  }
 }
 
 export const productController = new ProductController();

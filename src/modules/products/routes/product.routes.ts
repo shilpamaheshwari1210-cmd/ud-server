@@ -36,4 +36,13 @@ router.post('/:id/variants', authenticate, isAdminOrSubAdmin, productController.
 router.put('/:id/variants/:vid', authenticate, isAdminOrSubAdmin, productController.updateVariant.bind(productController));
 router.delete('/:id/variants/:vid', authenticate, isAdmin, productController.deleteVariant.bind(productController));
 
+// Country pricing/availability overrides — see
+// documentation/docs/decisions/0016-country-admin-ui.md ("A real gap found").
+router.get('/:id/country-pricing', authenticate, isAdminOrSubAdmin, productController.getCountryPricing.bind(productController));
+router.put('/:id/country-pricing/:countryId', authenticate, isAdminOrSubAdmin, productController.setCountryPricing.bind(productController));
+router.delete('/:id/country-pricing/:countryId', authenticate, isAdmin, productController.deleteCountryPricing.bind(productController));
+router.get('/:id/country-availability', authenticate, isAdminOrSubAdmin, productController.getCountryAvailability.bind(productController));
+router.put('/:id/country-availability/:countryId', authenticate, isAdminOrSubAdmin, productController.setCountryAvailability.bind(productController));
+router.delete('/:id/country-availability/:countryId', authenticate, isAdmin, productController.deleteCountryAvailability.bind(productController));
+
 export default router;
