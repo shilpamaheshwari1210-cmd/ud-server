@@ -37,6 +37,13 @@ const INIT_SETTINGS = [
   { key: 'youtube_url',          value: '',                                                                         group: 'social',   label: 'YouTube URL' },
   { key: 'pinterest_url',        value: '',                                                                         group: 'social',   label: 'Pinterest URL' },
   { key: 'announcement_text',    value: 'FREE SHIPPING ON ORDERS ABOVE ₹999 | USE CODE: WELCOME10 FOR 10% OFF',    group: 'homepage', label: 'Announcement Bar' },
+  // Phase 4 (Experience) §1: the storefront replaces the MEN/WOMEN toggle with
+  // Room/Material/Style as the primary browsing axis, so the toggle defaults
+  // OFF. `createMany({ skipDuplicates: true })` below only inserts this row if
+  // it does not already exist, so an admin who has explicitly re-enabled it
+  // (in an environment that started before this default existed) is never
+  // overwritten on restart. See docs/architecture/phase-4-experience-spec.md §1.
+  { key: 'gender_toggle_enabled', value: 'false',                                                                    group: 'homepage', label: 'Show Gender (Men/Women) Toggle' },
   { key: 'free_shipping_threshold', value: '999',                                                                   group: 'shipping', label: 'Free Shipping Threshold' },
   { key: 'standard_shipping_rate',  value: '99',                                                                    group: 'shipping', label: 'Standard Shipping Rate' },
   { key: 'express_shipping_rate',   value: '149',                                                                   group: 'shipping', label: 'Express Shipping Rate' },
