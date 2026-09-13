@@ -787,6 +787,13 @@ enum HomepageSectionType {
   STORE_LOCATOR
   MARQUEE
   INSTAGRAM_REELS
+  /// Phase 4 Experience — see phase-4-experience-spec.md. Grid of Room rows
+  /// linking to /shop?roomSlug=.
+  SHOP_BY_ROOM
+  /// Grid of Material rows linking to /shop?materialSlug=.
+  SHOP_BY_MATERIAL
+  /// Carousel of Artisan rows linking to the artisan bio page.
+  ARTISAN_SPOTLIGHT
 }
 
 model Store {
