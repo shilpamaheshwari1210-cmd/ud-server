@@ -6,13 +6,22 @@ import { sendSuccess, sendError } from '../../../utils/response';
  * Artisan admin CRUD — see
  * documentation/docs/architecture/phase-2-handicraft-domain-spec.md.
  *
- * Unlike Material/Style/Room, Artisan has no slug in the spec's model and no
- * public list endpoint — only a public detail page (`GET /:id`) for a future
- * artisan bio page linked from a product. Fields: name, bio, photo, region,
- * isActive.
+ * Unlike Material/Style/Room, Artisan has no slug in the spec's model. It now
+ * has a real public directory (`GET /`) plus a bio page (`GET /:id`) — see
+ * phase-4-experience-spec.md §3 (Product Storytelling). Fields: name, bio,
+ * photo, region, isActive.
  */
 export class ArtisanController {
-  /** Public: a single active artisan, for a future artisan bio page. */
+  /** Public: every active artisan, for the storefront directory. */
+  async getAll(_req: Request, res: Response) {
+    const artisans = await prisma.artisan.findMany({
+      where: { isActive: true },
+      orderBy: [{ name: 'asc' }],
+    });
+    return sendSuccess(res, artisans, 'Artisans fetched');
+  }
+
+  /** Public: a single active artisan, for the artisan bio page. */
   async getById(req: Request, res: Response) {
     const { id } = req.params;
     const artisan = await prisma.artisan.findFirst({ where: { id, isActive: true } });

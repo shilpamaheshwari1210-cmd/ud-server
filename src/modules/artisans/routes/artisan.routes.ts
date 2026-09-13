@@ -10,8 +10,8 @@ router.post('/', authenticate, isAdmin, artisanController.create.bind(artisanCon
 router.put('/:id', authenticate, isAdmin, artisanController.update.bind(artisanController));
 router.delete('/:id', authenticate, isAdmin, artisanController.delete.bind(artisanController));
 
-// Public — no list endpoint (no real artisan data yet); a bio page for a
-// known id only.
+// Public — static path before the '/:id' bio page.
+router.get('/', artisanController.getAll.bind(artisanController));
 router.get('/:id', artisanController.getById.bind(artisanController));
 
 export default router;
