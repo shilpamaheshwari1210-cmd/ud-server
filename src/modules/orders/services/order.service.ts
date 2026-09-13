@@ -390,7 +390,7 @@ export class OrderService {
   }
 
   async getUserOrders(userId: string, page = 1, limit = 10) {
-    const { skip } = paginationParams(page, limit);
+    const { skip, page: currentPage, limit: take } = paginationParams(page, limit);
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: { userId },
@@ -400,11 +400,11 @@ export class OrderService {
         },
         orderBy: { createdAt: 'desc' },
         skip,
-        take: limit,
+        take,
       }),
       prisma.order.count({ where: { userId } }),
     ]);
-    return { orders: orders.map(o => this.withoutOtpSecret(o)), total, page, limit };
+    return { orders: orders.map(o => this.withoutOtpSecret(o)), total, page: currentPage, limit: take };
   }
 
   async getAllOrders(page = 1, limit = 20, filters?: {
@@ -415,7 +415,7 @@ export class OrderService {
     startDate?: string;
     endDate?: string;
   }) {
-    const { skip } = paginationParams(page, limit);
+    const { skip, page: currentPage, limit: take } = paginationParams(page, limit);
     const where: any = {};
 
     if (filters?.status) where.status = filters.status;
@@ -448,12 +448,12 @@ export class OrderService {
         },
         orderBy: { createdAt: 'desc' },
         skip,
-        take: limit,
+        take,
       }),
       prisma.order.count({ where }),
     ]);
 
-    return { orders: orders.map(o => this.withoutOtpSecret(o)), total, page, limit };
+    return { orders: orders.map(o => this.withoutOtpSecret(o)), total, page: currentPage, limit: take };
   }
 
   async updateOrderStatus(
