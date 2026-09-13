@@ -1139,8 +1139,27 @@ model Country {
   homepageSections HomepageSection[]
   banners          Banner[]
   cmsPages         CmsPage[]
+  shippingRules    CountryShippingRule[]
 
   @@map("countries")
+}
+
+model CountryShippingRule {
+  id                    String   @id @default(uuid())
+  countryId             String
+  country               Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  method                String // "STANDARD" | "COD" | "EXPRESS" — same vocabulary order.service.ts already uses
+  cost                  Decimal  @db.Decimal(10, 2)
+  freeShippingThreshold Decimal? @db.Decimal(10, 2)
+  estimatedDaysMin      Int?
+  estimatedDaysMax      Int?
+  customsMessage        String?  @db.Text
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([countryId, method])
+  @@map("country_shipping_rules")
 }
 
 model ProductCountryPricing {

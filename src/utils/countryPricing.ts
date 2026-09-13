@@ -67,6 +67,34 @@ export async function getCountryPricingMap(
   return new Map(rows.map(r => [r.productId, { basePrice: r.basePrice, salePrice: r.salePrice }]));
 }
 
+/**
+ * Country shipping resolution — see
+ * documentation/docs/architecture/phase-3-country-shipping-and-admin-spec.md.
+ *
+ * Rule: a CountryShippingRule row for (country, method) wins outright — its
+ * `cost` is the shipping charge, and if `subtotal` meets `freeShippingThreshold`
+ * (when one is set) shipping is free. With no row for that (country, method)
+ * pair, return null so the caller falls back to its existing per-product
+ * override / flat-rate logic unchanged — this function only ever adds a new
+ * highest-priority step, it never replaces the rest of the chain.
+ */
+export async function resolveCountryShipping(
+  tx: Queryable,
+  countryId: string | null | undefined,
+  method: string,
+  subtotal: number,
+): Promise<{ cost: number } | null> {
+  if (!countryId) return null;
+  const rule = await tx.countryShippingRule.findUnique({
+    where: { countryId_method: { countryId, method } },
+  });
+  if (!rule || !rule.isActive) return null;
+
+  const freeThreshold = rule.freeShippingThreshold != null ? Number(rule.freeShippingThreshold) : null;
+  const cost = freeThreshold != null && subtotal >= freeThreshold ? 0 : Number(rule.cost);
+  return { cost };
+}
+
 export async function getCountryAvailabilityMap(
   tx: Queryable,
   countryId: string,

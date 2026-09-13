@@ -4,7 +4,7 @@ import { AppError } from '../../../middlewares/error.middleware';
 import { generateOrderNumber } from '../../../utils/slugify';
 import { paginationParams } from '../../../utils/slugify';
 import { logger } from '../../../utils/logger';
-import { resolveCountryByCode, getCountryPricingMap } from '../../../utils/countryPricing';
+import { resolveCountryByCode, getCountryPricingMap, resolveCountryShipping } from '../../../utils/countryPricing';
 
 export class OrderService {
   private static readonly SHIPPING_RATES: Record<string, number> = {
@@ -193,6 +193,18 @@ export class OrderService {
         if (productCharges.length > 0) {
           shippingCharge = Math.max(...productCharges);
         }
+      }
+
+      // Highest-priority step: a CountryShippingRule for (country, method)
+      // overrides everything above — per-product override and the flat rate
+      // both stay as the fallback chain for countries with no rule configured,
+      // so India (and every other country until an admin sets one up) keeps
+      // behaving exactly as it did before this existed.
+      const countryShippingRule = country
+        ? await resolveCountryShipping(tx, country.id, method, subtotal)
+        : null;
+      if (countryShippingRule) {
+        shippingCharge = countryShippingRule.cost;
       }
       // Prices are GST-inclusive; taxAmount is stored for display/accounting only
       const taxAmount = subtotal * 0.18;
