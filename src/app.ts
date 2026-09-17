@@ -45,6 +45,7 @@ import materialRoutes from './modules/materials/routes/material.routes';
 import styleRoutes from './modules/styles/routes/style.routes';
 import roomRoutes from './modules/rooms/routes/room.routes';
 import artisanRoutes from './modules/artisans/routes/artisan.routes';
+import metricsRoutes from './modules/metrics/routes/metrics.routes';
 
 const app = express();
 
@@ -202,6 +203,7 @@ app.use(`${v1}/materials`, materialRoutes);
 app.use(`${v1}/styles`, styleRoutes);
 app.use(`${v1}/rooms`, roomRoutes);
 app.use(`${v1}/artisans`, artisanRoutes);
+app.use(`${v1}/metrics`, metricsRoutes);
 
 // 404 & error handler
 app.use(notFound);
