@@ -1,8 +1,14 @@
 import { Request, Response } from 'express';
+import { prisma } from '../../../config/prisma';
 import { logger } from '../../../utils/logger';
 import { sendSuccess } from '../../../utils/response';
+import { resolveCountryIdForBrowsing } from '../../../utils/countryPricing';
 
 const VALID_NAMES = new Set(['CLS', 'FCP', 'FID', 'INP', 'LCP', 'TTFB']);
+
+const VALID_EVENT_NAMES = new Set([
+  'PAGE_VIEW', 'PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_STARTED', 'ORDER_PLACED',
+]);
 
 /**
  * Core Web Vitals field data (Phase 5 - Performance). This is deliberately
@@ -26,6 +32,36 @@ export class MetricsController {
       name, value, id, rating,
       path: typeof path === 'string' ? path.slice(0, 200) : undefined,
       country: typeof country === 'string' ? country.slice(0, 5) : undefined,
+    });
+
+    return sendSuccess(res, null, '');
+  }
+
+  /**
+   * The in-house funnel event log (Phase 7 - Analytics) -- see
+   * phase-7-analytics-spec.md for why this is a deliberately minimal
+   * alternative to a real analytics platform, not a placeholder for one.
+   */
+  async reportEvent(req: Request, res: Response) {
+    const { name, sessionId, path, productId, country } = req.body as Record<string, unknown>;
+
+    // Public, unauthenticated, fed by every visitor's browser -- validate
+    // the shape, same posture as reportWebVitals above.
+    if (typeof name !== 'string' || !VALID_EVENT_NAMES.has(name)) {
+      return sendSuccess(res, null, '');
+    }
+
+    const countryId = typeof country === 'string' ? await resolveCountryIdForBrowsing(country) : null;
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name,
+        sessionId: typeof sessionId === 'string' ? sessionId.slice(0, 100) : undefined,
+        userId: req.user?.userId,
+        path: typeof path === 'string' ? path.slice(0, 200) : undefined,
+        productId: typeof productId === 'string' ? productId.slice(0, 100) : undefined,
+        countryId: countryId ?? undefined,
+      },
     });
 
     return sendSuccess(res, null, '');

@@ -273,6 +273,49 @@ export class AnalyticsController {
 
     return sendSuccess(res, breakdown, 'Country breakdown fetched');
   }
+
+  /**
+   * Shopper funnel (Phase 7 - Analytics), from the in-house
+   * `AnalyticsEvent` log (`modules/metrics`). Counts DISTINCT SESSIONS
+   * reaching each stage, not raw event rows -- a shopper who views 5
+   * products must count once in PRODUCT_VIEW, not 5 times, or the
+   * conversion percentages below are meaningless.
+   */
+  async getFunnel(req: Request, res: Response) {
+    const { startDate, endDate } = req.query as Record<string, string>;
+    const range: any = {};
+    if (startDate) range.gte = new Date(startDate);
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      range.lte = end;
+    }
+    const where = Object.keys(range).length ? { createdAt: range } : {};
+
+    const STAGES = ['PAGE_VIEW', 'PRODUCT_VIEW', 'ADD_TO_CART', 'CHECKOUT_STARTED', 'ORDER_PLACED'] as const;
+
+    const counts = await Promise.all(
+      STAGES.map(name =>
+        prisma.analyticsEvent.findMany({
+          where: { ...where, name, sessionId: { not: null } },
+          select: { sessionId: true },
+          distinct: ['sessionId'],
+        }).then(rows => rows.length),
+      ),
+    );
+
+    const funnel = STAGES.map((stage, i) => ({
+      stage,
+      sessions: counts[i],
+      // Conversion from the very first stage, not step-to-step -- "what
+      // fraction of everyone who showed up placed an order" is the number
+      // that actually matters; step-to-step rates hide where the real drop
+      // happens once multiplied together.
+      conversionFromStart: counts[0] > 0 ? Math.round((counts[i] / counts[0]) * 1000) / 10 : 0,
+    }));
+
+    return sendSuccess(res, funnel, 'Funnel fetched');
+  }
 }
 
 export const analyticsController = new AnalyticsController();

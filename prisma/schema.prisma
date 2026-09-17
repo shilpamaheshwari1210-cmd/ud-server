@@ -551,6 +551,14 @@ model Order {
   countryId String?
   country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
 
+  /// First-touch marketing attribution (Phase 7 - Analytics), captured
+  /// client-side on the shopper's first landing and threaded through to
+  /// checkout. Typed columns, not a JSON blob, matching how every other
+  /// scalar fact about an order is modeled here.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+
   items          OrderItem[]
   payment        Payment?
   returnRequests ReturnRequest[]
@@ -1069,6 +1077,29 @@ model RecentlyViewed {
   @@unique([userId, productId])
   @@index([userId])
   @@map("recently_viewed")
+}
+
+// Phase 7 (Analytics) — a deliberately minimal in-house event log, not a
+// substitute for a real analytics platform (GA4/Segment/PostHog/etc, a
+// vendor decision, not code). No `meta`/free-form JSON column: every current
+// consumer (the funnel report) only needs the typed columns below, and a
+// blob nobody queries is premature flexibility. See phase-7-analytics-spec.md.
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  /// PAGE_VIEW | PRODUCT_VIEW | ADD_TO_CART | CHECKOUT_STARTED | ORDER_PLACED
+  name      String
+  /// Same id already sent as the `x-session-id` header (`lib/axios.ts`) —
+  /// reused, not a second identity mechanism.
+  sessionId String?
+  userId    String?
+  path      String?
+  productId String?
+  countryId String?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([sessionId])
+  @@map("analytics_events")
 }
 
 // ─────────────────────────────────────────────

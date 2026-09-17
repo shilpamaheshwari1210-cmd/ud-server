@@ -103,6 +103,13 @@ export class OrderService {
     // a price value itself. An unknown code is a real error here (unlike the
     // product browse endpoints) — real money is about to move.
     country?: string;
+    // Phase 7 (Analytics) — first-touch marketing attribution, captured
+    // client-side and threaded through unchanged. Purely informational: never
+    // affects pricing, stock, or any business rule, so (unlike `country`) an
+    // absent/unrecognised value is not an error.
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
   }) {
     return prisma.$transaction(async (tx) => {
       // 0. Resolve the country, if one was sent, before anything else — an
@@ -276,6 +283,9 @@ export class OrderService {
           userId,
           addressId: data.addressId,
           countryId: country?.id,
+          utmSource: data.utmSource,
+          utmMedium: data.utmMedium,
+          utmCampaign: data.utmCampaign,
           status: 'PENDING',
           paymentStatus: 'PENDING',
           paymentMethod: data.paymentMethod as any,

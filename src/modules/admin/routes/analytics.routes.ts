@@ -8,5 +8,6 @@ router.get('/dashboard', authenticate, isAdmin, analyticsController.getDashboard
 router.get('/revenue', authenticate, isAdmin, analyticsController.getRevenueReport.bind(analyticsController));
 router.get('/transactions', authenticate, isAdmin, analyticsController.getTransactions.bind(analyticsController));
 router.get('/country-breakdown', authenticate, isAdmin, analyticsController.getCountryBreakdown.bind(analyticsController));
+router.get('/funnel', authenticate, isAdmin, analyticsController.getFunnel.bind(analyticsController));
 
 export default router;
