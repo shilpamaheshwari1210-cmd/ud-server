@@ -34,6 +34,30 @@ const getCashfree = () => {
   return _cashfree;
 };
 
+/**
+ * Razorpay and Cashfree, as configured in this app, are India-only gateway
+ * integrations -- neither has been verified (or, per the open "payment
+ * providers for non-India markets" question in tasks/TASKS.md, even chosen)
+ * to actually settle a non-INR charge. `order.total` is computed from
+ * `ProductCountryPricing` and is already denominated in the ORDER's own
+ * country currency (schema.prisma `Country.currency`, e.g. "AED") once a
+ * non-India country is enabled -- so hardcoding `currency: 'INR'` while
+ * charging that local-currency total would silently submit the wrong amount
+ * under the wrong currency code (an AED total charged as if it were INR is
+ * off by roughly the AED:INR exchange rate, ~22x). This resolves the order's
+ * REAL currency and refuses online payment for anything but INR, rather than
+ * attempting an unverified pass-through that could as easily produce a
+ * confusing gateway-side error as a correct charge. COD remains available
+ * regardless -- this only gates the two online-payment code paths.
+ */
+async function resolveOrderCurrency(orderId: string): Promise<string> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { country: { select: { currency: true } } },
+  });
+  return order?.country?.currency || 'INR';
+}
+
 // ── Controller ───────────────────────────────────────────────────────
 export class PaymentController {
 
@@ -44,9 +68,14 @@ export class PaymentController {
     if (!order) return sendError(res, 'Order not found', 404);
     if (!req.user || order.userId !== req.user.userId) return sendError(res, 'Forbidden', 403);
 
+    const currency = await resolveOrderCurrency(orderId);
+    if (currency !== 'INR') {
+      return sendError(res, 'Online payment is not yet available for this country -- please choose Cash on Delivery', 400);
+    }
+
     const razorpayOrder = await getRazorpay().orders.create({
       amount:   Math.round(Number(order.total) * 100),
-      currency: 'INR',
+      currency,
       receipt:  order.orderNumber,
       notes:    { orderId: order.id },
     });
@@ -99,6 +128,11 @@ export class PaymentController {
     if (!order) return sendError(res, 'Order not found', 404);
     if (!req.user || order.userId !== req.user.userId) return sendError(res, 'Forbidden', 403);
 
+    const currency = await resolveOrderCurrency(orderId);
+    if (currency !== 'INR') {
+      return sendError(res, 'Online payment is not yet available for this country -- please choose Cash on Delivery', 400);
+    }
+
     const user  = order.user as any;
     const phone = (user.phone || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999';
     const cfOrderId = `cf_${order.orderNumber}`;
@@ -109,7 +143,7 @@ export class PaymentController {
     const request = {
       order_id:       cfOrderId,
       order_amount:   Number(order.total),
-      order_currency: 'INR',
+      order_currency: currency,
       customer_details: {
         customer_id:    user.id,
         customer_name:  `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Customer',
@@ -159,6 +193,15 @@ export class PaymentController {
     if (order.paymentMethod !== 'COD') return sendError(res, 'Not a COD order', 400);
     if (order.deliveryChargePaid) return sendError(res, 'Delivery charge already collected', 400);
 
+    const currency = await resolveOrderCurrency(orderId);
+    if (currency !== 'INR') {
+      // Already a COD order -- unlike the two online-checkout paths above,
+      // telling the shopper to "choose COD" would be nonsensical here. The
+      // delivery charge simply can't be collected online for this country
+      // yet; it stays payable in cash at the door with the rest of the order.
+      return sendError(res, 'Online delivery-charge collection is not yet available for this country -- the full amount will be collected on delivery', 400);
+    }
+
     const user           = order.user as any;
     const phone          = (user.phone || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999';
     const deliveryCharge = Number(order.shippingCharge);
@@ -167,7 +210,7 @@ export class PaymentController {
     const request = {
       order_id:       cfOrderId,
       order_amount:   deliveryCharge,
-      order_currency: 'INR',
+      order_currency: currency,
       customer_details: {
         customer_id:    user.id,
         customer_name:  `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Customer',
