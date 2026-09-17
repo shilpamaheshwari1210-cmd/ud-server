@@ -173,15 +173,16 @@ export class ProductService {
         orderBy,
         skip,
         take: limit,
+        // List views: no frontend consumer of `getProducts` (storefront shop/
+        // search, or the admin collection/gender pickers) reads material/
+        // style/room/artisan/badges off a list row -- those only matter on
+        // the single-product page (`getProductBySlug`), which has its own,
+        // separate include. Keeping them here was pure per-row waste on
+        // every catalogue/search page load. See phase-5-performance-spec.md.
         include: {
           images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
           category: { select: { id: true, name: true, slug: true } },
-          material: { select: { id: true, name: true, slug: true } },
-          style: { select: { id: true, name: true, slug: true } },
-          room: { select: { id: true, name: true, slug: true } },
-          artisan: { select: { id: true, name: true, region: true } },
           variants: { where: { isActive: true }, select: { size: true, color: true, colorHex: true, stockQuantity: true } },
-          badges: true,
         },
       }),
     ]);
@@ -873,7 +874,6 @@ export class ProductService {
       include: {
         images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
         variants: { where: { isActive: true }, select: { size: true, color: true, colorHex: true } },
-        badges: true,
       },
     });
   }
@@ -887,7 +887,6 @@ export class ProductService {
       include: {
         images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
         variants: { where: { isActive: true }, select: { size: true, color: true, colorHex: true } },
-        badges: true,
       },
     });
   }
@@ -901,7 +900,6 @@ export class ProductService {
       include: {
         images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
         variants: { where: { isActive: true }, select: { size: true, color: true, colorHex: true } },
-        badges: true,
       },
     });
   }
@@ -915,7 +913,6 @@ export class ProductService {
       include: {
         images: { orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }], take: 1 },
         variants: { where: { isActive: true }, select: { size: true, color: true, colorHex: true } },
-        badges: true,
       },
     });
   }
