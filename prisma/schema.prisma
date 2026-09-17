@@ -269,6 +269,7 @@ model Product {
   @@index([isActive, isFeatured])
   @@index([isActive, isTrending])
   @@index([isActive, isNewArrival])
+  @@index([isActive, isBestSeller])
   @@index([gender])
   @@index([materialId])
   @@index([styleId])
