@@ -275,6 +275,7 @@ export class OrderService {
           orderNumber: generateOrderNumber(),
           userId,
           addressId: data.addressId,
+          countryId: country?.id,
           status: 'PENDING',
           paymentStatus: 'PENDING',
           paymentMethod: data.paymentMethod as any,

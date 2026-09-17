@@ -235,6 +235,44 @@ export class AnalyticsController {
       },
     }, 'Transactions fetched');
   }
+
+  /**
+   * Revenue/orders by country (Phase 7 - Analytics). `Order.countryId` was
+   * added specifically for this report — before it, the only country signal
+   * on an order was the free-text `country` field buried inside the
+   * `shippingAddress` JSON snapshot, not a real, groupable FK. Orders placed
+   * before that migration (and any placed with no `country` resolved) have
+   * `countryId: null` and are reported as a single "Unknown" bucket rather
+   * than silently dropped, so the totals here always reconcile with the
+   * dashboard's revenue figures.
+   */
+  async getCountryBreakdown(req: Request, res: Response) {
+    const rows = await prisma.order.groupBy({
+      by: ['countryId'],
+      where: { paymentStatus: 'PAID' },
+      _sum: { total: true },
+      _count: { _all: true },
+    });
+
+    const countryIds = rows.map(r => r.countryId).filter((id): id is string => id !== null);
+    const countries = countryIds.length
+      ? await prisma.country.findMany({
+          where: { id: { in: countryIds } },
+          select: { id: true, code: true, name: true, currencySymbol: true },
+        })
+      : [];
+    const countryMap = new Map(countries.map(c => [c.id, c]));
+
+    const breakdown = rows
+      .map(r => ({
+        country: r.countryId ? countryMap.get(r.countryId) ?? null : null,
+        revenue: Number(r._sum.total || 0),
+        orders: r._count._all,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    return sendSuccess(res, breakdown, 'Country breakdown fetched');
+  }
 }
 
 export const analyticsController = new AnalyticsController();

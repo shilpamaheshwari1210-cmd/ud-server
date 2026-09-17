@@ -541,6 +541,16 @@ model Order {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 
+  // Phase 7 (Analytics) — the country resolved at checkout (same value
+  // priced/shipped the order), for country-level revenue reporting. Was
+  // previously only reconstructable, unreliably, by parsing the free-text
+  // `country` field inside the `shippingAddress` JSON snapshot. `SetNull` on
+  // delete, never Cascade — an order is a permanent record and must survive
+  // a country being removed from the admin panel. See
+  // phase-7-analytics-spec.md.
+  countryId String?
+  country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+
   items          OrderItem[]
   payment        Payment?
   returnRequests ReturnRequest[]
@@ -549,6 +559,7 @@ model Order {
   @@index([orderNumber])
   @@index([status])
   @@index([fulfilmentType])
+  @@index([countryId])
   @@map("orders")
 }
 
@@ -1148,6 +1159,7 @@ model Country {
   banners          Banner[]
   cmsPages         CmsPage[]
   shippingRules    CountryShippingRule[]
+  orders           Order[]
 
   @@map("countries")
 }
